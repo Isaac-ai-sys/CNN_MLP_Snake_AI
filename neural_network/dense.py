@@ -1,7 +1,7 @@
 import numpy as np
 
-class dense():
-    def __init__(self, inputs, neurons):
+class Dense():
+    def __init__(self, neurons, inputs):
         self.weights = np.random(neurons, inputs)
         self.biases = np.zeros(neurons, 1)
     
