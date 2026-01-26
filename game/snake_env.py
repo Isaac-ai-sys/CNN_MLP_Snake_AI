@@ -2,6 +2,7 @@ import numpy as np
 
 class Snake_env():
     def __init__(self, size=200):
+        self.size = size
         self.snake_board = np.zeros((size, size))
         self.snake_board[0][0] = 1
         #head and tail pointers to track which parts of snake to update
@@ -14,6 +15,7 @@ class Snake_env():
         x, y = np.random.randint(20, 100), np.random.randint(0, 100)
         self.food_board[x][y] = 1
         self.next_tail_dict = {}
+        self.length = 1
     
     def set_direction(self, turn):
         match turn:
@@ -37,4 +39,60 @@ class Snake_env():
     def step(self, direction):
         self.set_direction[direction]
         
+        #calculate new_head
+        new_head = np.zeros((2, 1))
+        match self.curr_direction:
+            case 0:
+                if self.head[1] == self.size - 1:
+                    new_head = None
+                else:
+                    new_head[0] = self.head[0]
+                    new_head[1] = self.head[1] + 1
+            case 1:
+                if self.head[0] == self.size - 1:
+                    new_head = None
+                else:
+                    new_head[0] = self.head[0] + 1
+                    new_head[1] = self.head[1]
+            case 2:
+                if self.head[1] == 0:
+                    new_head = None
+                else:
+                    new_head[0] = self.head[0]
+                    new_head[1] = self.head[1] - 1
+            case 3:
+                if self.head[0] == 0:
+                    new_head = None
+                else:
+                    new_head[0] = self.head[0] - 1
+                    new_head[1] = self.head[1]
+                    
+        #check if new head is snake body and not tail
+        if(self.snake_board[new_head[0]][new_head[1]] == 1 and not (new_head[0] == self.tail[0] and new_head[1] == self.tail[1])):
+            new_head = None
         
+        #calculate reward
+        reward = 0
+        if new_head == None:
+            reward -= 2
+
+            
+            
+            
+            
+    def get_state(self):
+        # #use tail dict as a sort of linked list to create more encoded snake board
+        # #start from tail and go all the way to head and gradually increase value of snake body as you go
+        # node = self.tail
+        # i = 1
+        # while node in self.next_tail_dict: # O(n) n = snake length
+        #     self.snake_board[node[0]][node[1]] = i / self.length # gradually increases as it goes up snake length
+        #     node = self.next_tail_dict[node]
+        #     i += 1
+        
+        snake_head_board = np.zeros((self.size, self.size))
+        snake_head_board[self.head[0]][self.head[1]] = 1
+        
+        boards = np.stack([self.snake_board, snake_head_board, self.food_board])
+        length = self.length / (self.size * self.size) # normalize length value between 0 and 1
+        return boards, self.direction, length
