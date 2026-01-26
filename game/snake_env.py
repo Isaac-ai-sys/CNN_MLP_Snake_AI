@@ -14,6 +14,9 @@ class Snake_env():
         self.food_board = np.zeros((size, size))
         x, y = np.random.randint(20, 100), np.random.randint(0, 100)
         self.food_board[x][y] = 1
+        self.food = np.zeros((2, 1))
+        self.food[0] = x
+        self.food[1] = y
         self.next_tail_dict = {}
         self.length = 1
     
@@ -72,14 +75,56 @@ class Snake_env():
             new_head = None
         
         #calculate reward
-        reward = 0
+        reward = -0.05 #small step penalty
         if new_head == None:
-            reward -= 2
+            reward -= 2 #negative reward for losing
+            state = self.get_state()
+            return state, reward
+        
+        #Manhattan distance calculation to see if snake is closer to food
+        new_dist = abs(new_head[0] - self.food[0]) + abs(new_head[1] - self.food[1])
+        old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
+        
+        if new_dist < old_dist:
+            reward += .03 #small reward but still overall negative to encourage faster solves
 
+        #check if new_head is over food
+        if new_head[0] == self.food[0] and new_head[1] == self.food[1]:
+            reward += 1
+        
+        #update next_tail_dict
+        self.next_tail_dict[self.head] = new_head
+        #update head
+        self.head = new_head
+        
+        # check if head is over food
+        if self.head[0] == self.food[0] and self.head[1] == self.food[1]:
+            self.length += 1
             
+            self.food_board[self.food[0]][self.food[1]] = 0
+            # select new food location that is not a snake body
+            zeros = np.argwhere(self.snake_board == 0)
             
+            if len(zeros) == 0:
+                reward += 10
+                state = self.get_state()
+                return state, reward
             
+            i = np.random.randint(len(zeros))
+            x, y = zeros[i]
             
+            self.food[x][y] = 1
+            self.food_board[x][y] = 1
+            
+            state = self.get_state()
+            return state, reward
+        
+        #update tail pointer if not over food
+        self.tail = self.next_tail_dict[self.tail]
+        
+        state = self.get_state()
+        return state, reward
+        
     def get_state(self):
         # #use tail dict as a sort of linked list to create more encoded snake board
         # #start from tail and go all the way to head and gradually increase value of snake body as you go
