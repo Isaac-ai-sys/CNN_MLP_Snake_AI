@@ -21,6 +21,7 @@ class Snake_env():
         self.length = 1
     
     def set_direction(self, turn):
+        #cannot turn back into snake
         match turn:
             case 0:
                 if self.curr_direction == 2:
