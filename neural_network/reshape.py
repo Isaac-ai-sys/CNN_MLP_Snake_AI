@@ -5,11 +5,12 @@ class Reshape():
         self.input_shape = input_shape
         self.output_shape = output_shape
     
-    def forward_prop(self, input):
-        return np.reshape(input, self.output_shape)
+    def forward_prop(self, input, direction, length):
+        flattened = input.reshape(-1)
+        return np.concatenate([flattened, direction, [length]])
     
     def backward_prop(self, output_gradient, learning_rate=0.001):
-        return np.reshape(output_gradient, self.input_shape)
+        return np.reshape(output_gradient[:np.prod(self.input_shape)], self.input_shape)
     
     def save(self, filename):
         np.savez(filename,
