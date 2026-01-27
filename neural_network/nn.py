@@ -10,7 +10,7 @@ class NN():
     def forward_prop(self, input, direction, length):
         for layer in self.layers[:-1]:
             if isinstance(layer, Reshape):
-                input = layer.forward_prop(input, direction length)
+                input = layer.forward_prop(input, direction, length)
             else:
                 input = layer.forward_prop(input)
         return self.layers[-1].forward_prop_softmax(input)
