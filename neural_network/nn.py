@@ -37,3 +37,9 @@ class NN():
     def load(self):
         for i in range(len(self.layers)):
             self.layers[i].load(f"Models/layer{i}.npz")
+    
+    def choose_action(self, input, direction, length):
+        probs = self.forward_prop(input, direction, length)
+        
+        action = np.random.choice(len(probs), p=probs)
+        return action

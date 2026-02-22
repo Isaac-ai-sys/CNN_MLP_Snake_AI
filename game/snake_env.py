@@ -1,6 +1,6 @@
 import numpy as np
 
-class Snake_env():
+class Snake_Env():
     def __init__(self, size=200):
         self.size = size
         self.snake_board = np.zeros((size, size))
@@ -19,6 +19,7 @@ class Snake_env():
         self.food[1] = y
         self.next_tail_dict = {}
         self.length = 1
+        self.running = True
     
     def set_direction(self, turn):
         #cannot turn back into snake
@@ -79,8 +80,8 @@ class Snake_env():
         reward = -0.05 #small step penalty
         if new_head == None:
             reward -= 2 #negative reward for losing
-            state = self.get_state()
-            return state, reward
+            self.running = False
+            return reward
         
         #Manhattan distance calculation to see if snake is closer to food
         new_dist = abs(new_head[0] - self.food[0]) + abs(new_head[1] - self.food[1])
@@ -109,6 +110,7 @@ class Snake_env():
             if len(zeros) == 0:
                 reward += 10
                 state = self.get_state()
+                self.running = False
                 return state, reward
             
             i = np.random.randint(len(zeros))
@@ -117,14 +119,12 @@ class Snake_env():
             self.food[x][y] = 1
             self.food_board[x][y] = 1
             
-            state = self.get_state()
-            return state, reward
+            return reward
         
         #update tail pointer if not over food
         self.tail = self.next_tail_dict[self.tail]
         
-        state = self.get_state()
-        return state, reward
+        return reward
         
     def get_state(self):
         # #use tail dict as a sort of linked list to create more encoded snake board
