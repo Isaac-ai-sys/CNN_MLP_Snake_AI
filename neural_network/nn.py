@@ -1,7 +1,7 @@
 import numpy as np
-from convolution import Convolution
-from dense import Dense
-from reshape import Reshape
+from neural_network.convolution import Convolution
+from neural_network.dense import Dense
+from neural_network.reshape import Reshape
 
 class NN():
     def __init__(self):

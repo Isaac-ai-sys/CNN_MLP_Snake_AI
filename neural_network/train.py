@@ -1,6 +1,6 @@
 import numpy as np
-from nn import NN
-from ..game.snake_env import Snake_Env
+from neural_network.nn import NN
+from game.snake_env import Snake_Env
 
 class Train():
     def __init__(self, neural_net):
@@ -38,13 +38,18 @@ class Train():
                 for r in reversed(rewards):
                     G = r + gamma * G
                     discounted_returns.insert(0, G)
-                rewards = discounted_returns
+                #normalize rewards
+                rewards = np.array(discounted_returns)
+                rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
                 
-                for i in range(len(states)):
+                indices = np.arange(len(states))
+                np.random.shuffle(indices)
+                
+                for i in indices:
                     self.nn.forward_prop(states[i], directions[i], lengths[i])
                     self.nn.backward_prop(actions[i], rewards[i])
                 
                 snake_length_sum += lengths[-1]
-            avg = snake_length_sum / episodes
-            print("AVG Snake Length for epoch {e}:  {avg}")
+            avg = (snake_length_sum * env.size * env.size) / episodes
+            print(f"AVG Snake Length for epoch {e}:  {avg}")
         return

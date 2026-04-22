@@ -3,18 +3,18 @@ import numpy as np
 class Snake_Env():
     def __init__(self, size=20):
         self.size = size
-        self.snake_board = np.zeros((size, size))
+        self.snake_board = np.zeros((size, size), dtype=int)
         self.snake_board[0][0] = 1
         #head and tail pointers to track which parts of snake to update
-        self.head = np.zeros((2, 1))
-        self.tail = np.zeros((2, 1))
+        self.head = np.zeros(2, dtype=int)
+        self.tail = np.zeros(2, dtype=int)
         self.direction = np.zeros(4)
         self.direction[0] = 1  # 0:North, 1:East, 2:South, 3:West
         self.curr_direction = 0 # index of direction array
-        self.food_board = np.zeros((size, size))
-        x, y = np.random.randint(20, 100), np.random.randint(0, 100)
+        self.food_board = np.zeros((size, size), dtype=int)
+        x, y = np.random.randint(2, 10), np.random.randint(2, 10)
         self.food_board[x][y] = 1
-        self.food = np.zeros((2, 1))
+        self.food = np.zeros(2, dtype=int)
         self.food[0] = x
         self.food[1] = y
         self.next_tail_dict = {}
@@ -42,46 +42,46 @@ class Snake_Env():
         return self.curr_direction
     
     def step(self, direction):
-        self.set_direction[direction]
+        turn = np.argmax(direction)
+        self.set_direction(turn)
         
         #calculate new_head
-        new_head = np.zeros((2, 1))
+        new_head = np.zeros(2, dtype=int)
         match self.curr_direction:
             case 0:
                 if self.head[1] == self.size - 1:
-                    new_head = None
+                    self.running = False
+                    return -2 - 0.005
                 else:
                     new_head[0] = self.head[0]
                     new_head[1] = self.head[1] + 1
             case 1:
                 if self.head[0] == self.size - 1:
-                    new_head = None
+                    self.running = False
+                    return -2 - 0.005
                 else:
                     new_head[0] = self.head[0] + 1
                     new_head[1] = self.head[1]
             case 2:
                 if self.head[1] == 0:
-                    new_head = None
+                    self.running = False
+                    return -2 - 0.005
                 else:
                     new_head[0] = self.head[0]
                     new_head[1] = self.head[1] - 1
             case 3:
                 if self.head[0] == 0:
-                    new_head = None
+                    self.running = False
+                    return -2 - 0.005
                 else:
                     new_head[0] = self.head[0] - 1
                     new_head[1] = self.head[1]
-                    
+        
+        reward = -0.005 #small step penalty
         #check if new head is snake body and not tail
         if(self.snake_board[new_head[0]][new_head[1]] == 1 and not (new_head[0] == self.tail[0] and new_head[1] == self.tail[1])):
-            new_head = None
-        
-        #calculate reward
-        reward = -0.005 #small step penalty
-        if new_head == None:
-            reward -= 2 #negative reward for losing
             self.running = False
-            return reward
+            return reward - 2
         
         #Manhattan distance calculation to see if snake is closer to food
         new_dist = abs(new_head[0] - self.food[0]) + abs(new_head[1] - self.food[1])
@@ -95,7 +95,7 @@ class Snake_Env():
             reward += 1
         
         #update next_tail_dict
-        self.next_tail_dict[self.head] = new_head
+        self.next_tail_dict[tuple(self.head)] = new_head
         #update head
         self.head = new_head
         
@@ -116,13 +116,14 @@ class Snake_Env():
             i = np.random.randint(len(zeros))
             x, y = zeros[i]
             
-            self.food[x][y] = 1
+            self.food[0] = x
+            self.food[1] = y
             self.food_board[x][y] = 1
             
             return reward
         
         #update tail pointer if not over food
-        self.tail = self.next_tail_dict[self.tail]
+        self.tail = self.next_tail_dict[tuple(self.tail)]
         
         return reward
         

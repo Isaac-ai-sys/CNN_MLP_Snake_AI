@@ -2,8 +2,8 @@ import numpy as np
 
 class Dense():
     def __init__(self, neurons, inputs):
-        self.weights = np.random(neurons, inputs)
-        self.biases = np.zeros(neurons, 1)
+        self.weights = np.random.randn(neurons, inputs) * 0.01
+        self.biases = np.zeros(neurons)
     
     def ReLu(self, z):
         return np.maximum(0, z)
@@ -12,10 +12,9 @@ class Dense():
         return (z > 0).astype(np.float32)
     
     def softmax(self, z):
-        z_stable = z - np.max(z, axis=0, keepdims=True)
-        z_ex = np.exp(z_stable)
-        z_sum = np.sum(z_ex)
-        return z_ex / (z_sum + 1e-12)
+        z = z - np.max(z)
+        exp = np.exp(z)
+        return exp / (np.sum(exp) + 1e-12)
     
     def forward_prop(self, input):
         x = np.asarray(input)
@@ -37,8 +36,8 @@ class Dense():
         dz = self.output - y_true
         dz *= advantage
         
-        dw = dz.dot(self.input.T)
-        db = np.sum(dz)
+        dw = np.outer(dz, self.input)
+        db = dz
         dx = self.weights.T.dot(dz)
         
         self.weights -= learning_rate * dw
@@ -48,8 +47,8 @@ class Dense():
     
     def backward_prop(self, da, learning_rate=0.001):
         dz = da * self.derivative_ReLu(self.pre_activated)
-        dw = dz.dot(self.input.T)
-        db = np.sum(dz)
+        dw = np.outer(dz, self.input)
+        db = dz
         dx = self.weights.T.dot(dz)
         
         self.weights -= learning_rate * dw

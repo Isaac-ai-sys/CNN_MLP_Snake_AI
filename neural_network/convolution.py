@@ -9,8 +9,8 @@ class Convolution():
         self.input_depth = input_depth
         self.output_shape = (depth, input_height - kernel_size + 1, input_width - kernel_size + 1)
         self.kernels_shape = (depth, input_depth, kernel_size, kernel_size)
-        self.kernels = np.random.randn(*self.kernels_shape)
-        self.biases = np.zeros(*self.output_shape)
+        self.kernels = np.random.randn(*self.kernels_shape) * np.sqrt(2 / (kernel_size * kernel_size * input_depth))
+        self.biases = np.zeros(self.output_shape)
     
     def forward_prop(self, input):
         self.input = input
@@ -32,8 +32,9 @@ class Convolution():
                 kernels_gradient[i , j] = signal.correlate2d(self.input[j], output_gradient[i], "valid")
                 input_gradient[j] += signal.convolve2d(output_gradient[i], self.kernels[i, j], "full")
         
+        bias_gradient = np.sum(output_gradient, axis=(1, 2))
         self.kernels -= learning_rate * kernels_gradient
-        self.biases -= learning_rate * output_gradient
+        self.biases -= learning_rate * bias_gradient[:, None, None]
         return input_gradient
     
     def ReLu(self, z):
