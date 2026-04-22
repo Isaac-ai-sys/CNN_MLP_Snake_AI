@@ -1,7 +1,7 @@
 import numpy as np
 
 class Snake_Env():
-    def __init__(self, size=200):
+    def __init__(self, size=20):
         self.size = size
         self.snake_board = np.zeros((size, size))
         self.snake_board[0][0] = 1
@@ -77,7 +77,7 @@ class Snake_Env():
             new_head = None
         
         #calculate reward
-        reward = -0.05 #small step penalty
+        reward = -0.005 #small step penalty
         if new_head == None:
             reward -= 2 #negative reward for losing
             self.running = False
@@ -88,7 +88,7 @@ class Snake_Env():
         old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
         
         if new_dist < old_dist:
-            reward += .03 #small reward but still overall negative to encourage faster solves
+            reward += .003 #small reward but still overall negative to encourage faster solves
 
         #check if new_head is over food
         if new_head[0] == self.food[0] and new_head[1] == self.food[1]:

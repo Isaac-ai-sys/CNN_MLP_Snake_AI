@@ -7,9 +7,9 @@ class Train():
         self.nn = neural_net
     
     def train(self, epochs=10, episodes=100, max_steps=100, learning_rate=0.001):
-        for e in epochs:
+        for e in range(epochs):
             snake_length_sum = 0
-            for ep in episodes:
+            for ep in range(episodes):
                 states = []
                 actions = []
                 rewards = []
@@ -33,8 +33,18 @@ class Train():
                 
                 # normalize rewards
                 gamma = .99
-                for i in range(len(rewards)):
-                    rewards[i] *= gamma
-                    gamma *= 0.99
+                discounted_returns = []
+                G = 0
+                for r in reversed(rewards):
+                    G = r + gamma * G
+                    discounted_returns.insert(0, G)
+                rewards = discounted_returns
                 
+                for i in range(len(states)):
+                    self.nn.forward_prop(states[i], directions[i], lengths[i])
+                    self.nn.backward_prop(actions[i], rewards[i])
                 
+                snake_length_sum += lengths[-1]
+            avg = snake_length_sum / episodes
+            print("AVG Snake Length for epoch {e}:  {avg}")
+        return

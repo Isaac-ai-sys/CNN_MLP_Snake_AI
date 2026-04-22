@@ -42,4 +42,6 @@ class NN():
         probs = self.forward_prop(input, direction, length)
         
         action = np.random.choice(len(probs), p=probs)
-        return action
+        result = np.zeros(4)
+        result[action] = 1
+        return result
