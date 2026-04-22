@@ -17,7 +17,8 @@ class Train():
                 lengths = []
                 
                 env = Snake_Env()
-                while env.running:
+                step = 0
+                while env.running and step < max_steps:
                     state, direction, length = env.get_state()
                     states.append(state)
                     directions.append(direction)
@@ -28,5 +29,12 @@ class Train():
                     
                     reward = env.step(action)
                     rewards.append(reward)
+                    step += 1
+                
+                # normalize rewards
+                gamma = .99
+                for i in range(len(rewards)):
+                    rewards[i] *= gamma
+                    gamma *= 0.99
                 
                 
