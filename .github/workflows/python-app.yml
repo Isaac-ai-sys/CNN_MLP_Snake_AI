@@ -43,7 +43,7 @@ jobs:
         run: flake8 . --ignore=E203,E261,E262,E265,E302,W293,W292,E501
 
       - name: Run tests
-        run: pytest --cov=.
+        run: PYTHONPATH=. pytest --cov=.
 
   deploy:
     needs: build-and-test
