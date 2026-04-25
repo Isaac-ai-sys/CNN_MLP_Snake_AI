@@ -79,7 +79,7 @@ class Snake_Env():
         
         reward = -0.005 #small step penalty
         #check if new head is snake body and not tail
-        if(self.snake_board[new_head[0]][new_head[1]] == 1 and not (new_head[0] == self.tail[0] and new_head[1] == self.tail[1])):
+        if (self.snake_board[new_head[0]][new_head[1]] == 1 and not (new_head[0] == self.tail[0] and new_head[1] == self.tail[1])):
             self.running = False
             return reward - 2
         

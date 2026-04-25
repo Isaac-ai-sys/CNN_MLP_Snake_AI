@@ -71,4 +71,4 @@ class Dense():
 
     def set_params(self, params):
         self.weights = params[0]
-        self.biases  = params[1]
+        self.biases = params[1]

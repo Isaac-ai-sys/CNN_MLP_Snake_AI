@@ -1,5 +1,4 @@
 import numpy as np
-from neural_network.nn import NN
 from game.snake_env import Snake_Env
 
 class Train():
@@ -31,14 +30,15 @@ class Train():
                     rewards.append(reward)
                     step += 1
                 
-                # normalize rewards
+                # discount rewards
                 gamma = .99
                 discounted_returns = []
                 G = 0
                 for r in reversed(rewards):
                     G = r + gamma * G
                     discounted_returns.insert(0, G)
-                #normalize rewards
+                
+                # normalize rewards
                 rewards = np.array(discounted_returns)
                 rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
                 
