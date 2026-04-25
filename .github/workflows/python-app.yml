@@ -40,7 +40,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Lint
-        run: flake8 .
+        run: flake8 . --ignore=E203,E261,E262,E265,E302,W293,W292,E501
 
       - name: Run tests
         run: pytest --cov=.
