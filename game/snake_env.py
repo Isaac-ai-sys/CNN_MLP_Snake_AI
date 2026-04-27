@@ -140,6 +140,6 @@ class Snake_Env():
         snake_head_board = np.zeros((self.size, self.size))
         snake_head_board[self.head[0]][self.head[1]] = 1
         
-        boards = np.stack([self.snake_board, snake_head_board, self.food_board])
+        boards = np.stack([self.snake_board, snake_head_board, self.food_board]) #tensor
         length = self.length / (self.size * self.size) # normalize length value between 0 and 1
         return boards, self.direction, length

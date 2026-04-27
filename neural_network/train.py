@@ -9,6 +9,7 @@ class Train():
         for e in range(epochs):
             snake_length_sum = 0
             for ep in range(episodes):
+                
                 states = []
                 actions = []
                 rewards = []
