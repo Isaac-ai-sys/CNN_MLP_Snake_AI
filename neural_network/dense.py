@@ -33,12 +33,13 @@ class Dense():
         return self.output
     
     def backward_prop_softmax(self, y_true, advantage, learning_rate=0.001):
+        batch_size = self.input.shape[0]
         dz = self.output - y_true
-        dz *= advantage
+        dz *= advantage[:, None]
         
-        dw = np.outer(dz, self.input)
-        db = dz
-        dx = self.weights.T.dot(dz)
+        dw = (dz.T @ self.input) / batch_size
+        db = np.mean(dz, axis=0)
+        dx = dz @ self.weights
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
