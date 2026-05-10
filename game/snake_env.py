@@ -53,29 +53,29 @@ class Snake_Env():
                     self.running = False
                     return -2 - 0.005
                 else:
-                    new_head[0] = self.head[0]
-                    new_head[1] = self.head[1] + 1
+                    new_head[0] = self.head[0] - 1
+                    new_head[1] = self.head[1]
             case 1:
                 if self.head[0] == self.size - 1:
                     self.running = False
                     return -2 - 0.005
                 else:
-                    new_head[0] = self.head[0] + 1
-                    new_head[1] = self.head[1]
+                    new_head[0] = self.head[0]
+                    new_head[1] = self.head[1] + 1
             case 2:
                 if self.head[1] == 0:
                     self.running = False
                     return -2 - 0.005
                 else:
-                    new_head[0] = self.head[0]
-                    new_head[1] = self.head[1] - 1
+                    new_head[0] = self.head[0] + 1
+                    new_head[1] = self.head[1]
             case 3:
                 if self.head[0] == 0:
                     self.running = False
                     return -2 - 0.005
                 else:
-                    new_head[0] = self.head[0] - 1
-                    new_head[1] = self.head[1]
+                    new_head[0] = self.head[0]
+                    new_head[1] = self.head[1] - 1
         
         reward = -0.005 #small step penalty
         #check if new head is snake body and not tail
@@ -99,6 +99,9 @@ class Snake_Env():
         #update head
         self.head = new_head
         
+        # After updating head:
+        self.snake_board[self.head[0]][self.head[1]] = 1
+        
         # check if head is over food
         if self.head[0] == self.food[0] and self.head[1] == self.food[1]:
             self.length += 1
@@ -109,9 +112,8 @@ class Snake_Env():
             
             if len(zeros) == 0:
                 reward += 10
-                state = self.get_state()
                 self.running = False
-                return state, reward
+                return reward
             
             i = np.random.randint(len(zeros))
             x, y = zeros[i]
@@ -123,8 +125,12 @@ class Snake_Env():
             return reward
         
         #update tail pointer if not over food
+        old_tail = self.tail  # save before advancing
         self.tail = self.next_tail_dict[tuple(self.tail)]
         
+        # After updating tail (when no food eaten):
+        self.tail = self.next_tail_dict[tuple(self.tail)]
+        self.snake_board[old_tail[0]][old_tail[1]] = 0  # clear old tail
         return reward
         
     def get_state(self):
