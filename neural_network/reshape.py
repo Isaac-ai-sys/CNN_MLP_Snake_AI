@@ -11,7 +11,7 @@ class Reshape():
         
         flat_input = input.reshape(batch_size, -1)
         flat_direction = direction.reshape(batch_size, -1)
-        length_col = np.full((batch_size, 1), length)
+        length_col = np.array(length).reshape(batch_size, 1)
         
         return np.concatenate(
             [flat_input, flat_direction, length_col],

@@ -10,7 +10,7 @@ if __name__ == "__main__":
     nn.add_dense_layer(32, 256)
     nn.add_dense_layer(10, 32)
     nn.add_dense_layer(4, 10)
-    # nn.load()
+    #nn.load()
     t = Train(nn)
     
     while True:

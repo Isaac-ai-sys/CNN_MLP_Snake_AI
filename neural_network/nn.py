@@ -39,9 +39,22 @@ class NN():
             self.layers[i].load(f"Models/layer{i}.npz")
     
     def choose_action(self, input, direction, length):
+        # ensure single sample
+        input = np.array(input)
+        direction = np.array(direction)
+
+        if input.ndim == 1:
+            input = input[None, :]
+            direction = direction[None, :]
+
         probs = self.forward_prop(input, direction, length)
         
+        # extract first (and only) sample
+        probs = probs[0]
+
         action = np.random.choice(len(probs), p=probs)
-        result = np.zeros(4)
+
+        result = np.zeros(len(probs))
         result[action] = 1
+
         return result

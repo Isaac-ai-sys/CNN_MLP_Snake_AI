@@ -7,12 +7,8 @@ class Train():
     
     def train(self, epochs=10, episodes=64, max_steps=100, learning_rate=0.001):
         for e in range(epochs):
+            episode_data = []
             snake_length_sum = 0
-            batch_states = []
-            batch_actions = []
-            batch_rewards = []
-            batch_directions = []
-            batch_lengths = []
             for ep in range(episodes):
                 
                 states = []
@@ -46,23 +42,22 @@ class Train():
                 
                 snake_length_sum += lengths[-1]
                 
-                batch_states.extend(states)
-                batch_actions.extend(actions)
-                batch_rewards.extend(rewards)
-                batch_directions.extend(directions)
-                batch_lengths.extend(lengths)
+                discounted_returns = np.array(discounted_returns)
+                discounted_returns = discounted_returns - np.mean(discounted_returns)
+                discounted_returns = discounted_returns / (np.std(discounted_returns) + 1e-8)
+                
+                episode_data.append((states, directions, lengths, actions, discounted_returns))
 
             avg = (snake_length_sum * env.size * env.size) / episodes
             print(f"AVG Snake Length for epoch {e}:  {avg}")
             
-            batch_states = np.array(batch_states)
-            batch_actions = np.array(batch_actions)
-            batch_rewards = np.array(batch_rewards)
-            batch_directions = np.array(batch_directions)
-            batch_lengths = np.array(batch_lengths)
-            
-            batch_rewards = (batch_rewards - np.mean(batch_rewards)) / (np.std(batch_rewards) + 1e-8)
-            
-            self.nn.forward_prop(batch_states, batch_directions, batch_lengths)
-            self.nn.backward_prop(batch_actions, batch_rewards)
+            for states, directions, lengths, actions, advantages in episode_data:
+                states = np.array(states)
+                directions = np.array(directions)
+                lengths = np.array(lengths)
+                actions = np.array(actions)
+                advantages = np.array(advantages)
+                
+                self.nn.forward_prop(states, directions, lengths)
+                self.nn.backward_prop(actions, advantages)
         return
