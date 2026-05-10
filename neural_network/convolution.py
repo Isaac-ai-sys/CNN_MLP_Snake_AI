@@ -10,29 +10,50 @@ class Convolution():
         self.output_shape = (depth, input_height - kernel_size + 1, input_width - kernel_size + 1)
         self.kernels_shape = (depth, input_depth, kernel_size, kernel_size)
         self.kernels = np.random.randn(*self.kernels_shape) * np.sqrt(2 / (kernel_size * kernel_size * input_depth))
-        self.biases = np.zeros(self.output_shape)
+        self.biases = np.zeros((depth, 1, 1))
     
     def forward_prop(self, input):
+        # ensure shape is correct
+        if input.ndim == 3:
+            input = input[None, :]
+        
         self.input = input
-        self.output = np.copy(self.biases)
-        for i in range(self.depth):
-            for j in range(self.input_depth):
-                self.output[i] += signal.correlate2d(self.input[j], self.kernels[i, j], "valid")
+        batch_size = self.input.shape[0]
+        self.output = np.zeros((batch_size, *self.output_shape))
+        for b in range(batch_size):
+            for i in range(self.depth):
+                self.output[b, i] += self.biases[i, 0, 0]
+                for j in range(self.input_depth):
+                    self.output[b, i] += signal.correlate2d(self.input[b, j], self.kernels[i, j], "valid")
         self.pre_activation_output = self.output
         self.output = self.ReLu(self.output)
         return self.output
     
     def backward_prop(self, output, learning_rate=0.001):
+        batch_size = self.input.shape[0]
         output_gradient = output * self.Derivative_ReLu(self.pre_activation_output)
         kernels_gradient = np.zeros(self.kernels_shape)
-        input_gradient = np.zeros(self.input_shape)
+        input_gradient = np.zeros_like(self.input)
         
         for i in range(self.depth):
             for j in range(self.input_depth):
-                kernels_gradient[i , j] = signal.correlate2d(self.input[j], output_gradient[i], "valid")
-                input_gradient[j] += signal.convolve2d(output_gradient[i], self.kernels[i, j], "full")
-        
-        bias_gradient = np.sum(output_gradient, axis=(1, 2))
+                correlations = [
+                    signal.correlate2d(
+                        self.input[b, j],
+                        output_gradient[b, i],
+                        mode="valid"
+                    )
+                    for b in range(batch_size)
+                ]
+                kernels_gradient[i, j] = np.mean(np.stack(correlations), axis=0)
+                for b in range(batch_size):
+                    
+                    input_gradient[b, j] += signal.convolve2d(
+                        output_gradient[b, i],
+                        self.kernels[i, j],
+                        mode="full"
+                    )
+        bias_gradient = np.sum(output_gradient, axis=(0, 2, 3)) / batch_size
         self.kernels -= learning_rate * kernels_gradient
         self.biases -= learning_rate * bias_gradient[:, None, None]
         return input_gradient

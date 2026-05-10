@@ -6,15 +6,24 @@ class Reshape():
         self.output_shape = output_shape
     
     def forward_prop(self, input, direction, length):
-        flattened = input.reshape(-1)
-        return np.concatenate([
-            flattened.reshape(-1),
-            direction.reshape(-1),
-            np.array([length])
-        ])
+        self.input_shape = input.shape
+        batch_size = self.input_shape[0]
+        
+        flat_input = input.reshape(batch_size, -1)
+        flat_direction = direction.reshape(batch_size, -1)
+        length_col = np.full((batch_size, 1), length)
+        
+        return np.concatenate(
+            [flat_input, flat_direction, length_col],
+            axis=1
+        )
     
     def backward_prop(self, output_gradient, learning_rate=0.001):
-        return np.reshape(output_gradient[:np.prod(self.input_shape)], self.input_shape)
+        input_size = np.prod(self.input_shape[1:])
+        
+        grad_input = output_gradient[:, :input_size]
+        
+        return grad_input.reshape(self.input_shape)
     
     def save(self, filename):
         np.savez(filename,

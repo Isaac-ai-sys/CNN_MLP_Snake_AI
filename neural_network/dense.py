@@ -2,33 +2,33 @@ import numpy as np
 
 class Dense():
     def __init__(self, neurons, inputs):
-        self.weights = np.random.randn(neurons, inputs) * 0.01
+        self.weights = np.random.randn(neurons, inputs) * np.sqrt(2 / inputs)
         self.biases = np.zeros(neurons)
     
-    def ReLu(self, z):
-        return np.maximum(0, z)
+    def ReLu(self, pre_activated):
+        return np.maximum(0, pre_activated)
     
-    def derivative_ReLu(self, z):
-        return (z > 0).astype(np.float32)
+    def derivative_ReLu(self, pre_activated):
+        return (pre_activated > 0).astype(np.float32)
     
     def softmax(self, z):
-        z = z - np.max(z)
+        z = z - np.max(z, axis=1, keepdims=True)
         exp = np.exp(z)
-        return exp / (np.sum(exp) + 1e-12)
+        return exp / np.sum(exp, axis=1, keepdims=True)
     
     def forward_prop(self, input):
-        x = np.asarray(input)
-        
-        self.input = x
-        self.pre_activated = self.weights.dot(self.input) + self.biases
+        if input.ndim == 1:
+            input = input[None, :]
+        self.input = input
+        self.pre_activated = self.input @ self.weights.T + self.biases
         self.output = self.ReLu(self.pre_activated)
         return self.output
     
     def forward_prop_softmax(self, input):
-        x = np.asarray(input)
-    
-        self.input = x
-        self.pre_activated_output = self.weights.dot(self.input) + self.biases
+        if input.ndim == 1:
+            input = input[None, :]
+        self.input = input
+        self.pre_activated_output = self.input @ self.weights.T + self.biases
         self.output = self.softmax(self.pre_activated_output)
         return self.output
     
@@ -47,10 +47,11 @@ class Dense():
         return dx
     
     def backward_prop(self, da, learning_rate=0.001):
+        batch_size = self.input.shape[0]
         dz = da * self.derivative_ReLu(self.pre_activated)
-        dw = np.outer(dz, self.input)
-        db = dz
-        dx = self.weights.T.dot(dz)
+        dw = (dz.T @ self.input) / batch_size
+        db = np.mean(dz, axis=0)
+        dx = dz @ self.weights
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
@@ -66,11 +67,3 @@ class Dense():
         data = np.load(filename, allow_pickle=True)
         self.weights = data["weights"]
         self.biases = data["biases"]
-    
-    def get_params(self):
-        return [self.weights, self.biases]
-
-    def set_params(self, params):
-        
-        self.weights = params[0]
-        self.biases = params[1]
