@@ -32,14 +32,21 @@ class Dense():
         self.output = self.softmax(self.pre_activated_output)
         return self.output
     
-    def backward_prop_softmax(self, y_true, advantage, learning_rate=0.001):
+    def backward_prop_softmax(self, y_true, advantage, learning_rate=0.001, entropy_beta=0.00):
         batch_size = self.input.shape[0]
         dz = self.output - y_true
         dz *= advantage[:, None]
         
+        # Entropy gradient: pushes distribution toward uniform
+        entropy_grad = self.output * (np.log(self.output + 1e-8) + 1)
+        dz += entropy_beta * entropy_grad  # subtract because we maximize entropy
+        
         dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
+        
+        dw = np.clip(dw, -5.0, 5.0)
+        db = np.clip(db, -5.0, 5.0)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
@@ -52,6 +59,9 @@ class Dense():
         dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
+        
+        dw = np.clip(dw, -5.0, 5.0)
+        db = np.clip(db, -5.0, 5.0)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
