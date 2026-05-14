@@ -6,7 +6,7 @@ class Train():
         self.nn = neural_net
         self.board_size = board_size
     
-    def train(self, epochs=10, episodes=10, max_steps=1000, learning_rate=0.001):
+    def train(self, epochs=100, episodes=100, max_steps=1000, learning_rate=0.001):
         epoch_avg = 0
         entropy_avg = 0
         for e in range(epochs):
@@ -80,7 +80,7 @@ class Train():
             # print("adv mean:", all_advantages.mean())
             # print("adv std:", all_advantages.std())
             
-            batch_size = 64
+            batch_size = 256
             for i in range(0, len(all_states), batch_size):
                 s = all_states[i:i+batch_size]
                 d = all_directions[i:i+batch_size]

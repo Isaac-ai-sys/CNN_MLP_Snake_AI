@@ -6,6 +6,11 @@ from neural_network.reshape import Reshape
 class NN():
     def __init__(self):
         self.layers = []
+        from pathlib import Path
+
+        self.BASE_DIR = Path(__file__).resolve().parent.parent
+        self.save_dir = self.BASE_DIR / "Models" / "layers"
+        self.save_dir.mkdir(exist_ok=True)
     
     def forward_prop(self, input, direction, length):
         for layer in self.layers[:-1]:
@@ -32,11 +37,11 @@ class NN():
     
     def save(self):
         for i in range(len(self.layers)):
-            self.layers[i].save(f"Models/layer{i}")
+            self.layers[i].save(f"{self.save_dir}/layer{i}")
     
     def load(self):
         for i in range(len(self.layers)):
-            self.layers[i].load(f"Models/layer{i}.npz")
+            self.layers[i].load(f"{self.save_dir}{i}.npz")
     
     def choose_action(self, input, direction, length):
         # ensure single sample
