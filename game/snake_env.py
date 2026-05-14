@@ -4,19 +4,22 @@ class Snake_Env():
     def __init__(self, size=20):
         self.size = size
         self.snake_board = np.zeros((size, size), dtype=int)
-        start = np.random.randint(1, size - 1, size=2)
+        start = np.random.randint(3, 6, size=2)
         self.snake_board[start[0]][start[1]] = 1
+        # start = [2, 2]
+        # start = np.array(start)
         #head and tail pointers to track which parts of snake to update
         self.head = start.copy()
         self.tail = start.copy()
-        self.direction = np.zeros(4)
-        self.curr_direction = np.random.randint(4) # [North, East, South, West]
+        self.direction = np.zeros(4) # [North, East, South, West]
+        self.curr_direction = 0
         self.direction[self.curr_direction] = 1
         self.food_board = np.zeros((size, size), dtype=int)
         self.food = np.zeros(2, dtype=int)
         zeros = np.argwhere(self.snake_board == 0)
         i = np.random.randint(len(zeros))
         x, y = zeros[i]
+        # x, y = 1, 1
         self.food_board[x][y] = 1
         self.food[0] = x
         self.food[1] = y
@@ -45,59 +48,61 @@ class Snake_Env():
         return self.curr_direction
     
     def step(self, direction):
+        reward = 0
+        reward -= 0.05 #small step penalty
+        # reward += 0.01   # survival bonus per step
         turn = np.argmax(direction)
         self.set_direction(turn)
         
         #calculate new_head
         new_head = np.zeros(2, dtype=int)
         match self.curr_direction:
-            case 0:  # North → decreases row
-                if self.head[0] == 0:          # was: head[1] == size-1
+            case 0:
+                if self.head[1] == self.size - 1:
                     self.running = False
-                    return -5 - 0.005
-                else:
-                    new_head[0] = self.head[0] - 1
-                    new_head[1] = self.head[1]
-            case 1:  # East → increases col
-                if self.head[1] == self.size - 1:  # was: head[0] == size-1
-                    self.running = False
-                    return -5 - 0.005
+                    return reward - 1
                 else:
                     new_head[0] = self.head[0]
                     new_head[1] = self.head[1] + 1
-            case 2:  # South → increases row
-                if self.head[0] == self.size - 1:  # was: head[1] == 0
+            case 1:
+                if self.head[0] == self.size - 1:
                     self.running = False
-                    return -5 - 0.005
+                    return reward - 1
                 else:
                     new_head[0] = self.head[0] + 1
                     new_head[1] = self.head[1]
-            case 3:  # West → decreases col
-                if self.head[1] == 0:          # was: head[0] == 0
+            case 2:
+                if self.head[1] == 0:
                     self.running = False
-                    return -5 - 0.005
+                    return reward - 1
                 else:
                     new_head[0] = self.head[0]
                     new_head[1] = self.head[1] - 1
-        
-        reward = -0.005 #small step penalty
-        #check if new head is snake body and not tail
-        if (self.snake_board[new_head[0]][new_head[1]] == 1 and not (new_head[0] == self.tail[0] and new_head[1] == self.tail[1])):
-            self.running = False
-            return reward - 5
+            case 3:
+                if self.head[0] == 0:
+                    self.running = False
+                    return reward - 1
+                else:
+                    new_head[0] = self.head[0] - 1
+                    new_head[1] = self.head[1]
+        if self.snake_board[new_head[0]][new_head[1]] == 1:
+            # allow moving into tail ONLY if tail moves away this step
+            if not (new_head[0] == self.tail[0] and new_head[1] == self.tail[1]):
+                self.running = False
+                return reward - 1
         
         #Manhattan distance calculation to see if snake is closer to food
         new_dist = abs(new_head[0] - self.food[0]) + abs(new_head[1] - self.food[1])
         old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
         
         if new_dist < old_dist:
-            reward += 0.1 #makes stepping in direction of food overall positive
-        else:
-            reward -= 0.1
+            reward += 0.01 #makes stepping in direction of food more positive
+        # else:
+        #     reward -= 0.1
 
         #check if new_head is over food
         if new_head[0] == self.food[0] and new_head[1] == self.food[1]:
-            reward += 5
+            reward += 3
         
         #update next_tail_dict
         self.next_tail_dict[tuple(self.head)] = new_head
@@ -116,7 +121,7 @@ class Snake_Env():
             zeros = np.argwhere(self.snake_board == 0)
             
             if len(zeros) == 0:
-                reward += 10
+                reward += 3
                 self.running = False
                 return reward
             

@@ -15,10 +15,10 @@ class NN():
                 input = layer.forward_prop(input)
         return self.layers[-1].forward_prop_softmax(input)
     
-    def backward_prop(self, input, advantage):
-        input = self.layers[-1].backward_prop_softmax(input, advantage)
+    def backward_prop(self, input, advantage, learning_rate=0.0001):
+        input = self.layers[-1].backward_prop_softmax(input, advantage, learning_rate)
         for layer in reversed(self.layers[:-1]):
-            input = layer.backward_prop(input)
+            input = layer.backward_prop(input, learning_rate)
         return input
     
     def add_reshape_layer(self, input_shape, output_shape):
@@ -38,7 +38,7 @@ class NN():
         for i in range(len(self.layers)):
             self.layers[i].load(f"Models/layer{i}.npz")
     
-    def choose_action(self, input, direction, length, choose_max=False):
+    def choose_action(self, input, direction, length):
         # ensure single sample
         input = np.array(input)
         direction = np.array(direction)
@@ -52,10 +52,7 @@ class NN():
         # extract first (and only) sample
         probs = probs[0]
 
-        if(choose_max):
-            action = np.argmax(probs)
-        else:
-            action = np.random.choice(len(probs), p=probs)
+        action = np.random.choice(len(probs), p=probs)
 
         result = np.zeros(len(probs))
         result[action] = 1
