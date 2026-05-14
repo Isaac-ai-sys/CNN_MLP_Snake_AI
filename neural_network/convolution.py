@@ -1,5 +1,5 @@
 import numpy as np
-from scipy import signal
+# from scipy import signal
 
 class Convolution():
     def __init__(self, input_shape, kernel_size, depth):
