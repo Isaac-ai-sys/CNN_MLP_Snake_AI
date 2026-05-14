@@ -38,16 +38,15 @@ class Dense():
         dz = self.output - y_true
         dz *= advantage[:, None]
         
-        # probs = self.output
-
-        # dz -= entropy_beta * (probs * (np.log(probs + 1e-8) + 1))
+        probs = self.output
+        dz -= entropy_beta * (probs * (np.log(probs + 1e-8) + 1))
         
         dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
         
-        # dw = np.clip(dw, -10, 10)
-        # db = np.clip(db, -10, 10)
+        dw = np.clip(dw, -10, 10)
+        db = np.clip(db, -10, 10)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
@@ -61,8 +60,8 @@ class Dense():
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
         
-        # dw = np.clip(dw, -10, 10)
-        # db = np.clip(db, -10, 10)
+        dw = np.clip(dw, -10, 10)
+        db = np.clip(db, -10, 10)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db

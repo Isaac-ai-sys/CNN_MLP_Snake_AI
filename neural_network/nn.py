@@ -20,7 +20,7 @@ class NN():
                 input = layer.forward_prop(input)
         return self.layers[-1].forward_prop_softmax(input)
     
-    def backward_prop(self, input, advantage, learning_rate=0.0001):
+    def backward_prop(self, input, advantage, learning_rate=0.001):
         input = self.layers[-1].backward_prop_softmax(input, advantage, learning_rate)
         for layer in reversed(self.layers[:-1]):
             input = layer.backward_prop(input, learning_rate)

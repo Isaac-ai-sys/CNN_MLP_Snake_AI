@@ -49,7 +49,7 @@ class Snake_Env():
     
     def step(self, direction):
         reward = 0
-        reward -= 0.05 #small step penalty
+        reward -= 0.01 #small step penalty
         # reward += 0.01   # survival bonus per step
         turn = np.argmax(direction)
         self.set_direction(turn)
@@ -96,13 +96,13 @@ class Snake_Env():
         old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
         
         if new_dist < old_dist:
-            reward += 0.01 #makes stepping in direction of food more positive
-        # else:
-        #     reward -= 0.1
+            reward += 0.05 #makes stepping in direction of food more positive
+        else:
+            reward -= 0.05
 
         #check if new_head is over food
         if new_head[0] == self.food[0] and new_head[1] == self.food[1]:
-            reward += 3
+            reward += 1
         
         #update next_tail_dict
         self.next_tail_dict[tuple(self.head)] = new_head
@@ -121,7 +121,7 @@ class Snake_Env():
             zeros = np.argwhere(self.snake_board == 0)
             
             if len(zeros) == 0:
-                reward += 3
+                reward += 1
                 self.running = False
                 return reward
             
