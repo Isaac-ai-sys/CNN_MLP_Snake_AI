@@ -5,43 +5,87 @@ from neural_network.reshape import Reshape
 
 class NN():
     def __init__(self):
-        self.layers = []
+        self.actor_layers = []
+        self.critic_layers = []
+        self.feature_layers = []
         from pathlib import Path
 
         self.BASE_DIR = Path(__file__).resolve().parent.parent
-        self.save_dir = self.BASE_DIR / "Models" / "layers"
-        self.save_dir.mkdir(exist_ok=True)
+        self.save_dir = self.BASE_DIR / "Models"
+        (self.save_dir / "actor").mkdir(exist_ok=True)
+        (self.save_dir / "critic").mkdir(exist_ok=True)
+        (self.save_dir / "feature").mkdir(exist_ok=True)
     
-    def forward_prop(self, input, direction, length):
-        for layer in self.layers[:-1]:
+    def forward_prop(self, state, direction, length):
+        # feature forward prop
+        feature_input = state
+        for layer in self.feature_layers:
             if isinstance(layer, Reshape):
-                input = layer.forward_prop(input, direction, length)
+                feature_input = layer.forward_prop(feature_input, direction, length)
             else:
-                input = layer.forward_prop(input)
-        return self.layers[-1].forward_prop_softmax(input)
+                feature_input = layer.forward_prop(feature_input)
+        features = feature_input
+        
+        # actor forward prop
+        actor_input = features
+        for layer in self.actor_layers[:-1]:
+            actor_input = layer.forward_prop(actor_input)
+        actor_probs = self.actor_layers[-1].forward_prop_softmax(actor_input)
+        
+        # critic forward prop
+        critic_input = features
+        for layer in self.critic_layers[:-1]:
+            critic_input = layer.forward_prop(critic_input)
+        critic_value = self.critic_layers[-1].forward_prop_value(critic_input)
+        
+        return actor_probs, critic_value
     
-    def backward_prop(self, input, advantage, learning_rate=0.001):
-        input = self.layers[-1].backward_prop_softmax(input, advantage, learning_rate)
-        for layer in reversed(self.layers[:-1]):
-            input = layer.backward_prop(input, learning_rate)
-        return input
+    def backward_prop(self, actions, advantages, returns, learning_rate=0.001):
+        # actor back_prop
+        actor_input = actions
+        actor_input = self.actor_layers[-1].backward_prop_softmax(actor_input, advantages, learning_rate)
+        for layer in reversed(self.actor_layers[:-1]):
+            actor_input = layer.backward_prop(actor_input, learning_rate)
+        actor_dx = actor_input
+        
+        # value back_prop
+        critic_input = returns
+        critic_input = self.critic_layers[-1].backward_prop_value(critic_input, learning_rate)
+        for layer in reversed(self.critic_layers[:-1]):
+            critic_input = layer.backward_prop(critic_input, learning_rate)
+        critic_dx = critic_input
+        
+        # feature back_prop
+        feature_input = actor_dx + 0.5 * critic_dx
+        for layer in reversed(self.feature_layers):
+            feature_input = layer.backward_prop(feature_input, learning_rate)
+        
+        return feature_input
     
-    def add_reshape_layer(self, input_shape, output_shape):
-        self.layers.append(Reshape(input_shape, output_shape))
+    def add_reshape_layer(self, input_shape, output_shape, layers):
+        layers.append(Reshape(input_shape, output_shape))
     
-    def add_dense_layer(self, neurons, inputs):
-        self.layers.append(Dense(neurons, inputs))
+    def add_dense_layer(self, neurons, inputs, layers):
+        layers.append(Dense(neurons, inputs))
     
-    def add_convolution_layer(self, input_shape, kernel_size, depth):
-        self.layers.append(Convolution(input_shape, kernel_size, depth))
+    def add_convolution_layer(self, input_shape, kernel_size, depth, layers):
+        layers.append(Convolution(input_shape, kernel_size, depth))
     
     def save(self):
-        for i in range(len(self.layers)):
-            self.layers[i].save(f"{self.save_dir}/layer{i}")
+        for i in range(len(self.actor_layers)):
+            self.actor_layers[i].save(f"{self.save_dir}/actor/layer{i}")
+        for i in range(len(self.critic_layers)):
+            self.critic_layers[i].save(f"{self.save_dir}/critic/layer{i}")
+        for i in range(len(self.feature_layers)):
+            self.feature_layers[i].save(f"{self.save_dir}/feature/layer{i}")
     
     def load(self):
-        for i in range(len(self.layers)):
-            self.layers[i].load(f"{self.save_dir}{i}.npz")
+        for i in range(len(self.actor_layers)):
+            self.actor_layers[i].load(f"{self.save_dir}/actor/layer{i}.npz")
+        for i in range(len(self.critic_layers)):
+            self.critic_layers[i].load(f"{self.save_dir}/critic/layer{i}.npz")
+        for i in range(len(self.feature_layers)):
+            self.feature_layers[i].load(f"{self.save_dir}/feature/layer{i}.npz")
     
     def choose_action(self, input, direction, length):
         # ensure single sample
@@ -52,7 +96,7 @@ class NN():
             input = input[None, :]
             direction = direction[None, :]
 
-        probs = self.forward_prop(input, direction, length)
+        probs, value = self.forward_prop(input, direction, length)
         
         # extract first (and only) sample
         probs = probs[0]
@@ -62,4 +106,4 @@ class NN():
         result = np.zeros(len(probs))
         result[action] = 1
 
-        return result
+        return result, value

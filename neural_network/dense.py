@@ -32,16 +32,41 @@ class Dense():
         self.output = self.softmax(self.pre_activated_output)
         return self.output
     
+    def forward_prop_value(self, input):
+        if input.ndim == 1:
+            input = input[None, :]
+        self.input = input
+        self.pre_activated_output = self.input @ self.weights.T + self.biases
+        self.output = self.pre_activated_output
+        return self.output
+
+    def backward_prop_value(self, true_advantage, learning_rate=0.001):
+        batch_size = self.input.shape[0]
+        
+        dz = ((self.output - true_advantage) ** 2) / batch_size
+        
+        dw = dz.T @ self.input
+        db = np.mean(dz, axis=0)
+        dx = dz @ self.weights
+        
+        dw = np.clip(dw, -10, 10)
+        db = np.clip(db, -10, 10)
+        
+        self.weights -= learning_rate * dw
+        self.biases -= learning_rate * db
+        return dx
+    
     def backward_prop_softmax(self, y_true, advantage, learning_rate=0.001, entropy_beta=0.001):
         batch_size = self.input.shape[0]
         
         dz = self.output - y_true
         dz *= advantage[:, None]
+        dz /= batch_size
         
         probs = self.output
         dz -= entropy_beta * (probs * (np.log(probs + 1e-8) + 1))
         
-        dw = (dz.T @ self.input) / batch_size
+        dw = dz.T @ self.input
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
         
