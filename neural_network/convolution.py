@@ -149,8 +149,8 @@ class Convolution():
         # --- bias gradient ---
         bias_gradient = np.sum(output_gradient, axis=(0, 2, 3)) / batch_size
         
-        kernels_gradient = np.clip(kernels_gradient, -10.0, 10.0)
-        bias_gradient = np.clip(bias_gradient, -10.0, 10.0)
+        kernels_gradient = np.clip(kernels_gradient, -5.0, 5.0)
+        bias_gradient = np.clip(bias_gradient, -5.0, 5.0)
         
         self.kernels -= learning_rate * kernels_gradient
         self.biases -= learning_rate * bias_gradient[:, None, None]

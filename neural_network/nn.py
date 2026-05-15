@@ -40,36 +40,38 @@ class NN():
         
         return actor_probs, critic_value
     
-    def backward_prop(self, actions, advantages, returns, learning_rate=0.001):
+    def backward_prop(self, actions_one_hot, ppo_weight, target, learning_rate=0.001):
         # actor back_prop
-        actor_input = actions
-        actor_input = self.actor_layers[-1].backward_prop_softmax(actor_input, advantages, learning_rate)
+        actor_input = actions_one_hot
+        actor_input = self.actor_layers[-1].backward_prop_softmax(actor_input, ppo_weight, learning_rate)
         for layer in reversed(self.actor_layers[:-1]):
             actor_input = layer.backward_prop(actor_input, learning_rate)
         actor_dx = actor_input
         
         # value back_prop
-        critic_input = returns
+        critic_input = target
         critic_input = self.critic_layers[-1].backward_prop_value(critic_input, learning_rate)
         for layer in reversed(self.critic_layers[:-1]):
             critic_input = layer.backward_prop(critic_input, learning_rate)
         critic_dx = critic_input
         
         # feature back_prop
-        feature_input = actor_dx + 0.5 * critic_dx
+        actor_dx /= np.std(actor_dx) + 1e-8
+        critic_dx /= np.std(critic_dx) + 1e-8
+        feature_input = actor_dx + critic_dx
         for layer in reversed(self.feature_layers):
             feature_input = layer.backward_prop(feature_input, learning_rate)
         
         return feature_input
     
-    def add_reshape_layer(self, input_shape, output_shape, layers):
-        layers.append(Reshape(input_shape, output_shape))
+    def create_reshape_layer(self, input_shape, output_shape):
+        return Reshape(input_shape, output_shape)
     
-    def add_dense_layer(self, neurons, inputs, layers):
-        layers.append(Dense(neurons, inputs))
+    def create_dense_layer(self, neurons, inputs):
+        return Dense(neurons, inputs)
     
-    def add_convolution_layer(self, input_shape, kernel_size, depth, layers):
-        layers.append(Convolution(input_shape, kernel_size, depth))
+    def create_convolution_layer(self, input_shape, kernel_size, depth):
+        return Convolution(input_shape, kernel_size, depth)
     
     def save(self):
         for i in range(len(self.actor_layers)):
@@ -96,14 +98,16 @@ class NN():
             input = input[None, :]
             direction = direction[None, :]
 
-        probs, value = self.forward_prop(input, direction, length)
+        probs, values = self.forward_prop(input, direction, length)
         
         # extract first (and only) sample
         probs = probs[0]
+        value = values[0]
 
         action = np.random.choice(len(probs), p=probs)
+        log_prob = np.log(probs[action] + 1e-8)
 
         result = np.zeros(len(probs))
         result[action] = 1
 
-        return result, value
+        return result, value, log_prob
