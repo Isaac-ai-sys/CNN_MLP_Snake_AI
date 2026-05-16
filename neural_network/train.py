@@ -1,10 +1,30 @@
 import numpy as np
 from game.snake_env import Snake_Env
+import multiprocessing
 
 class Train():
     def __init__(self, neural_net, board_size=20):
         self.nn = neural_net
         self.board_size = board_size
+    
+    @staticmethod
+    def collect_episode(nn, board_size, max_steps):
+        states, actions, values, rewards, directions, lengths, log_probs = [], [], [], [], [], [], []
+        env = Snake_Env(board_size)
+        step = 0
+        while env.running and step < max_steps:
+            state, direction, length = env.get_state()
+            states.append(state)
+            directions.append(direction)
+            lengths.append(length)
+            action, value, log_prob = nn.choose_action(state, direction, length)
+            actions.append(action)
+            values.append(value)
+            log_probs.append(log_prob)
+            rewards.append(env.step(action))
+            step += 1
+        
+        return (states, directions, lengths, actions, values, rewards, log_probs), lengths[-1]
     
     def compute_gae(self, rewards, values, gamma=0.99, lam=0.95):
         rewards = np.array(rewards)
@@ -28,26 +48,15 @@ class Train():
         for e in range(epochs):
             episode_data = []
             snake_length_sum = 0
-            for ep in range(episodes):
-                states, actions, values, rewards, directions, lengths, log_probs = [], [], [], [], [], [], []
-                env = Snake_Env(self.board_size)
-                size = env.size
-                step = 0
-                while env.running and step < max_steps:
-                    state, direction, length = env.get_state()
-                    states.append(state)
-                    directions.append(direction)
-                    lengths.append(length)
-                    action, value, log_prob = self.nn.choose_action(state, direction, length)
-                    actions.append(action)
-                    values.append(value)
-                    log_probs.append(log_prob)
-                    rewards.append(env.step(action))
-                    step += 1
-                
-                snake_length_sum += lengths[-1]
-                episode_data.append((states, directions, lengths, actions, values, rewards, log_probs))
-                #print(discounted_returns)
+            size = self.board_size
+            
+            # Multiprocess episode collection
+            with multiprocessing.Pool() as pool:
+                results = pool.starmap(self.collect_episode, [(self.nn, self.board_size, max_steps)] * episodes)
+            
+            for ep_data, final_length in results:
+                episode_data.append(ep_data)
+                snake_length_sum += final_length
 
             avg = (snake_length_sum * size * size) / episodes
             epoch_avg += avg

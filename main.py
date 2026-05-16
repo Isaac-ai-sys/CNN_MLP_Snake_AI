@@ -38,11 +38,12 @@ if __name__ == "__main__":
     epoch_max = 0
     entropy_min = 2
     while True:
-        epoch_avg = t.train(epochs=5, episodes=100)
+        epoch_avg = t.train(epochs=100, episodes=250)
         
         if(epoch_avg > epoch_max):
             epoch_max = epoch_avg
             print(f"epoch_avg: {epoch_avg:.3f} ****** New Max ******")
+            nn.save()
         else:
             print(f"epoch_avg: {epoch_avg:.3f}")
         
@@ -51,5 +52,3 @@ if __name__ == "__main__":
         #     print(f"entropy_avg: {entropy_avg:.3f} ****** New Min ******")
         # else:
         #     print(f"entropy_avg: {entropy_avg:.3f}")
-        
-        nn.save()
