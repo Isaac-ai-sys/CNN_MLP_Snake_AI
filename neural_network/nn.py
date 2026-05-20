@@ -57,6 +57,7 @@ class NN():
         critic_dx = critic_input
         
         # feature back_prop
+        actor_dx = -actor_dx  # negate for feature layers
         actor_dx /= np.std(actor_dx) + 1e-8
         critic_dx /= np.std(critic_dx) + 1e-8
         feature_input = actor_dx + critic_dx

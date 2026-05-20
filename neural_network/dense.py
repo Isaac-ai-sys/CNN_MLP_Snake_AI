@@ -37,7 +37,7 @@ class Dense():
             input = input[None, :]
         self.input = input
         self.pre_activated_output = self.input @ self.weights.T + self.biases
-        self.output = np.tanh(self.pre_activated_output)
+        self.output = self.pre_activated_output
         return self.output
 
     def backward_prop_value(self, target, learning_rate=0.001):
@@ -46,9 +46,9 @@ class Dense():
         self.output = self.output.reshape(-1, 1)
         
         dz = self.output - target
-        dz /= (np.std(target) + 1e-8)
+        # dz /= (np.std(target) + 1e-8)
         
-        dw = dz.T @ self.input
+        dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
         
@@ -68,16 +68,17 @@ class Dense():
 
         dz[batch_idx, action_idx] = ppo_weight
         dz -= self.output * ppo_weight[:, None]
+        dz += entropy_beta * (np.log(self.output + 1e-8) + 1)
         
-        dw = dz.T @ self.input
+        dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
         
         dw = np.clip(dw, -5, 5)
         db = np.clip(db, -5, 5)
         
-        self.weights -= learning_rate * dw
-        self.biases -= learning_rate * db
+        self.weights += learning_rate * dw
+        self.biases += learning_rate * db
         
         return dx
     
@@ -86,7 +87,7 @@ class Dense():
         
         dz = da * self.derivative_ReLu(self.pre_activated)
         
-        dw = dz.T @ self.input
+        dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
         

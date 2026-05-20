@@ -181,7 +181,7 @@ class Convolution():
                 input_gradient[:, :, i:i+k, j:j+k] += input_grad_patches[:, i, j, :, :, :]
         
         # --- bias gradient ---
-        bias_gradient = np.sum(output_gradient, axis=(0, 2, 3))
+        bias_gradient = np.sum(output_gradient, axis=(0, 2, 3)) / batch_size
         
         kernels_gradient = np.clip(kernels_gradient, -5.0, 5.0)
         bias_gradient = np.clip(bias_gradient, -5.0, 5.0)

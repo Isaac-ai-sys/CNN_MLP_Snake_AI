@@ -34,7 +34,7 @@ class Train():
     
     def compute_gae(self, rewards, values, gamma=0.99, lam=0.95):
         rewards = np.array(rewards)
-        values = np.array(values).squeeze()
+        values = np.array(values).reshape(-1)
 
         values_next = np.append(values[1:], 0.0)
 
@@ -151,14 +151,16 @@ class Train():
                     clipped_ratio = np.clip(ratio, 1 - eps, 1 + eps)
                     ppo_weight = np.minimum(ratio * adv, clipped_ratio * adv)
                     
-                    ppo_weight = (ppo_weight - ppo_weight.mean()) / (ppo_weight.std() + 1e-8)
+                    # ppo_weight = (ppo_weight - ppo_weight.mean()) / (ppo_weight.std() + 1e-8)
                     
-                    entropy_bonus = 0.01 * -np.sum(new_probs * np.log(new_probs + 1e-8), axis=1)
-                    ppo_weight += entropy_bonus
+                    # entropy_bonus = 0.01 * -np.sum(new_probs * np.log(new_probs + 1e-8), axis=1)
+                    # ppo_weight += entropy_bonus
 
-                    critic_loss_signal = ret
+                    ret_mean = ret.mean()
+                    ret_std  = ret.std() + 1e-8
+                    critic_loss_signal = (ret - ret_mean) / ret_std
                     
-                    if np.mean(np.abs(ratio - 1.0)) > 0.2:
+                    if np.mean(np.abs(ratio - 1.0)) > 0.5:
                         early_stop = True
                         break
 

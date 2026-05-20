@@ -49,7 +49,7 @@ class Snake_Env():
     
     def step(self, direction):
         reward = 0
-        reward -= 0.01 #small step penalty
+        reward -= 0.0005 #small step penalty
         # reward += 0.01   # survival bonus per step
         turn = np.argmax(direction)
         self.set_direction(turn)
@@ -168,14 +168,14 @@ class Snake_Env():
         
         distance_to_danger_right = 1
         x = self.head[0] + 1
-        while x < 20 and self.snake_board[x][self.head[1]] != 1:
+        while x < self.size and self.snake_board[x][self.head[1]] != 1:
             distance_to_danger_right += 1
             x += 1
         distance_to_danger_right /= self.size
         
         distance_to_danger_up = 1
         y = self.head[1] + 1
-        while y < 20 and self.snake_board[self.head[0]][y] != 1:
+        while y < self.size and self.snake_board[self.head[0]][y] != 1:
             distance_to_danger_up += 1
             y += 1
         distance_to_danger_up /= self.size
