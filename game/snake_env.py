@@ -158,4 +158,36 @@ class Snake_Env():
         
         boards = np.stack([self.snake_board, snake_head_board, self.food_board]) #tensor
         length = self.length / (self.size * self.size) # normalize length value between 0 and 1
-        return boards, self.direction, length
+        
+        distance_to_danger_left = 1
+        x = self.head[0] - 1
+        while x >= 0 and self.snake_board[x][self.head[1]] != 1:
+            distance_to_danger_left += 1
+            x -= 1
+        distance_to_danger_left /= self.size
+        
+        distance_to_danger_right = 1
+        x = self.head[0] + 1
+        while x < 20 and self.snake_board[x][self.head[1]] != 1:
+            distance_to_danger_right += 1
+            x += 1
+        distance_to_danger_right /= self.size
+        
+        distance_to_danger_up = 1
+        y = self.head[1] + 1
+        while y < 20 and self.snake_board[self.head[0]][y] != 1:
+            distance_to_danger_up += 1
+            y += 1
+        distance_to_danger_up /= self.size
+        
+        distance_to_danger_down = 1
+        y = self.head[1] - 1
+        while y >= 0 and self.snake_board[self.head[0]][y] != 1:
+            distance_to_danger_down += 1
+            y -= 1
+        distance_to_danger_down /= self.size
+        
+        dx_food = (self.head[0] - self.food[0]) / self.size
+        dy_food = (self.head[1] - self.food[1]) / self.size
+        
+        return boards, self.direction, length, distance_to_danger_up, distance_to_danger_right, distance_to_danger_down, distance_to_danger_left, dx_food, dy_food

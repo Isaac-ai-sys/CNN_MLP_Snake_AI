@@ -2,6 +2,7 @@ import numpy as np
 from neural_network.convolution import Convolution
 from neural_network.dense import Dense
 from neural_network.reshape import Reshape
+from neural_network.max_pool import Max_Pool
 
 class NN():
     def __init__(self):
@@ -16,12 +17,12 @@ class NN():
         (self.save_dir / "critic").mkdir(exist_ok=True)
         (self.save_dir / "feature").mkdir(exist_ok=True)
     
-    def forward_prop(self, state, direction, length):
+    def forward_prop(self, state, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food):
         # feature forward prop
         feature_input = state
         for layer in self.feature_layers:
             if isinstance(layer, Reshape):
-                feature_input = layer.forward_prop(feature_input, direction, length)
+                feature_input = layer.forward_prop(feature_input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food)
             else:
                 feature_input = layer.forward_prop(feature_input)
         features = feature_input
@@ -59,9 +60,14 @@ class NN():
         actor_dx /= np.std(actor_dx) + 1e-8
         critic_dx /= np.std(critic_dx) + 1e-8
         feature_input = actor_dx + critic_dx
+        feature_input /= np.std(feature_input) + 1e-8
+        # print(f"feature input std (entering feature layers): {np.std(feature_input):.6f}")  # should be ~1.0
         for layer in reversed(self.feature_layers):
             feature_input = layer.backward_prop(feature_input, learning_rate)
         
+        # print(f"actor_dx std: {np.std(actor_dx):.6f}")
+        # print(f"critic_dx std: {np.std(critic_dx):.6f}")
+        # print(f"feature input std: {np.std(feature_input):.6f}")
         return feature_input
     
     def create_reshape_layer(self, input_shape, output_shape):
@@ -72,6 +78,9 @@ class NN():
     
     def create_convolution_layer(self, input_shape, kernel_size, depth):
         return Convolution(input_shape, kernel_size, depth)
+    
+    def create_max_pool_layer(self, size):
+        return Max_Pool(size)
     
     def save(self):
         for i in range(len(self.actor_layers)):
@@ -89,7 +98,7 @@ class NN():
         for i in range(len(self.feature_layers)):
             self.feature_layers[i].load(f"{self.save_dir}/feature/layer{i}.npz")
     
-    def choose_action(self, input, direction, length):
+    def choose_action(self, input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food):
         # ensure single sample
         input = np.array(input)
         direction = np.array(direction)
@@ -98,7 +107,7 @@ class NN():
             input = input[None, :]
             direction = direction[None, :]
 
-        probs, values = self.forward_prop(input, direction, length)
+        probs, values = self.forward_prop(input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food)
         
         # extract first (and only) sample
         probs = probs[0]

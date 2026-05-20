@@ -9,22 +9,28 @@ class Train():
     
     @staticmethod
     def collect_episode(nn, board_size, max_steps):
-        states, actions, values, rewards, directions, lengths, log_probs = [], [], [], [], [], [], []
+        states, actions, values, rewards, directions, lengths, distances_to_danger_up, distances_to_danger_right, distances_to_danger_down, distances_to_danger_left, dx_foods, dy_foods, log_probs = [], [], [], [], [], [], [], [], [], [], [], [], []
         env = Snake_Env(board_size)
         step = 0
         while env.running and step < max_steps:
-            state, direction, length = env.get_state()
+            state, direction, length, distance_to_danger_up, distance_to_danger_right, distance_to_danger_down, distance_to_danger_left, dx_food, dy_food = env.get_state()
             states.append(state)
             directions.append(direction)
             lengths.append(length)
-            action, value, log_prob = nn.choose_action(state, direction, length)
+            distances_to_danger_up.append(distance_to_danger_up)
+            distances_to_danger_right.append(distance_to_danger_right)
+            distances_to_danger_down.append(distance_to_danger_down)
+            distances_to_danger_left.append(distance_to_danger_left)
+            dx_foods.append(dx_food)
+            dy_foods.append(dy_food)
+            action, value, log_prob = nn.choose_action(state, direction, length, distance_to_danger_up, distance_to_danger_right, distance_to_danger_down, distance_to_danger_left, dx_food, dy_food)
             actions.append(action)
             values.append(value)
             log_probs.append(log_prob)
             rewards.append(env.step(action))
             step += 1
         
-        return (states, directions, lengths, actions, values, rewards, log_probs), lengths[-1]
+        return (states, directions, lengths, actions, values, rewards, log_probs, distances_to_danger_up, distances_to_danger_right, distances_to_danger_down, distances_to_danger_left, dx_foods, dy_foods), lengths[-1]
     
     def compute_gae(self, rewards, values, gamma=0.99, lam=0.95):
         rewards = np.array(rewards)
@@ -43,7 +49,7 @@ class Train():
 
         return advantages
     
-    def train(self, epochs=100, episodes=100, max_steps=1000, learning_rate=0.001):
+    def train(self, epochs=100, episodes=100, max_steps=1000, learning_rate=0.0001):
         epoch_avg = 0
         for e in range(epochs):
             episode_data = []
@@ -66,8 +72,12 @@ class Train():
             all_directions = np.concatenate([ep[1] for ep in episode_data])
             all_lengths = np.array([l for ep in episode_data for l in ep[2]])
             all_actions = np.concatenate([ep[3] for ep in episode_data])
-            all_values = np.concatenate([ep[4] for ep in episode_data])
-            all_log_probs = np.concatenate([ep[6] for ep in episode_data])
+            all_distances_to_danger_up = np.array([d for ep in episode_data for d in ep[7]])
+            all_distances_to_danger_right = np.array([d for ep in episode_data for d in ep[8]])
+            all_distances_to_danger_down = np.array([d for ep in episode_data for d in ep[9]])
+            all_distances_to_danger_left = np.array([d for ep in episode_data for d in ep[10]])
+            all_dx_foods = np.array([d for ep in episode_data for d in ep[11]])
+            all_dy_foods = np.array([d for ep in episode_data for d in ep[12]])
             all_advantages = []
             all_returns = []
 
@@ -88,35 +98,75 @@ class Train():
 
             eps = 0.2
             batch_size = 64
+            gradient_epochs = 3
+            
+            # Compute old log probs once from the current (pre-update) policy
+            old_log_probs = []
             for i in range(0, len(all_states), batch_size):
                 s = all_states[i:i+batch_size]
                 d = all_directions[i:i+batch_size]
                 l = all_lengths[i:i+batch_size]
                 a = all_actions[i:i+batch_size]
-
-                adv = all_advantages[i:i+batch_size]
-                ret = all_returns[i:i+batch_size]
-
-                new_probs, new_values = self.nn.forward_prop(s, d, l)
-
+                du = all_distances_to_danger_up[i:i+batch_size]
+                dr = all_distances_to_danger_right[i:i+batch_size]
+                dd = all_distances_to_danger_down[i:i+batch_size]
+                dl = all_distances_to_danger_left[i:i+batch_size]
+                dx = all_dx_foods[i:i+batch_size]
+                dy = all_dy_foods[i:i+batch_size]
+                probs, _ = self.nn.forward_prop(s, d, l, du, dr, dd, dl, dx, dy)
                 action_indices = np.argmax(a, axis=1)
+                lp = np.log(probs[np.arange(len(action_indices)), action_indices] + 1e-8)
+                old_log_probs.append(lp)
+            old_log_probs = np.concatenate(old_log_probs)
+            
+            for g in range(gradient_epochs):
+                early_stop = False
+                idx = np.random.permutation(len(all_states))
+                for i in range(0, len(all_states), batch_size):
+                    indices = idx[i:i+batch_size]
+                    s = all_states[indices]
+                    d = all_directions[indices]
+                    l = all_lengths[indices]
+                    a = all_actions[indices]
+                    du = all_distances_to_danger_up[indices]
+                    dr = all_distances_to_danger_right[indices]
+                    dd = all_distances_to_danger_down[indices]
+                    dl = all_distances_to_danger_left[indices]
+                    dx = all_dx_foods[indices]
+                    dy = all_dy_foods[indices]
 
-                new_log_probs = np.log(
-                    new_probs[np.arange(len(action_indices)), action_indices] + 1e-8
-                )
+                    adv = all_advantages[indices]
+                    ret = all_returns[indices]
 
-                ratio = np.exp(new_log_probs - all_log_probs[i:i+batch_size])
+                    new_probs, new_values = self.nn.forward_prop(s, d, l, du, dr, dd, dl, dx, dy)
 
-                clipped_ratio = np.clip(ratio, 1 - eps, 1 + eps)
-                ppo_weight = clipped_ratio * adv
-                
-                entropy_bonus = 0.01 * -np.sum(new_probs * np.log(new_probs + 1e-8), axis=1)
-                ppo_weight += entropy_bonus
-                
-                ppo_weight = (ppo_weight - ppo_weight.mean()) / (ppo_weight.std() + 1e-8)
+                    action_indices = np.argmax(a, axis=1)
 
-                critic_loss_signal = (ret - new_values.squeeze()) ** 2
+                    new_log_probs = np.log(
+                        new_probs[np.arange(len(action_indices)), action_indices] + 1e-8
+                    )
 
-                self.nn.backward_prop(a, ppo_weight, critic_loss_signal, learning_rate)
+                    ratio = np.exp(new_log_probs - old_log_probs[indices])
+
+                    clipped_ratio = np.clip(ratio, 1 - eps, 1 + eps)
+                    ppo_weight = np.minimum(ratio * adv, clipped_ratio * adv)
+                    
+                    ppo_weight = (ppo_weight - ppo_weight.mean()) / (ppo_weight.std() + 1e-8)
+                    
+                    entropy_bonus = 0.01 * -np.sum(new_probs * np.log(new_probs + 1e-8), axis=1)
+                    ppo_weight += entropy_bonus
+
+                    critic_loss_signal = ret
+                    
+                    if np.mean(np.abs(ratio - 1.0)) > 0.2:
+                        early_stop = True
+                        break
+
+                    self.nn.backward_prop(a, ppo_weight, critic_loss_signal, learning_rate)
+                    
+                    # raw_avg = snake_length_sum / episodes
+                    # print(f"Epoch {e}: avg_length={raw_avg:.2f}, grad_epochs_run={g+1}")
+                if early_stop:
+                    break
         epoch_avg /= epochs
         return epoch_avg
