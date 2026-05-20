@@ -1,6 +1,3 @@
-import numpy as np
-
-
 class Max_Pool:
     def __init__(self, size=2):
         self.pool_size = size
