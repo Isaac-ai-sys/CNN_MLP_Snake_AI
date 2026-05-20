@@ -59,7 +59,7 @@ class Dense():
         self.biases -= learning_rate * db
         return dx
     
-    def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.001, entropy_beta=0.001):
+    def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.001, entropy_beta=0.01):
         batch_size = self.input.shape[0]
         
         dz = np.zeros_like(self.output)
