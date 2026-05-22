@@ -4,6 +4,8 @@ class Dense():
     def __init__(self, neurons, inputs):
         self.weights = np.random.randn(neurons, inputs) * np.sqrt(2 / inputs)
         self.biases = np.zeros(neurons)
+        self.last_dw_norm = 0.0
+        self.last_db_norm = 0.0
     
     def ReLu(self, pre_activated):
         return np.maximum(0, pre_activated)
@@ -40,49 +42,69 @@ class Dense():
         self.output = self.pre_activated_output
         return self.output
 
-    def backward_prop_value(self, target, learning_rate=0.001):
+    def backward_prop_value(self, target, learning_rate=0.001, value_loss_coef=1.0):
         batch_size = self.input.shape[0]
         target = target.reshape(-1, 1)
         self.output = self.output.reshape(-1, 1)
         
         dz = self.output - target
+        dz *= value_loss_coef
         # dz /= (np.std(target) + 1e-8)
         
         dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
         
-        dw = np.clip(dw, -5, 5)
-        db = np.clip(db, -5, 5)
+        # record parameter gradient norms for diagnostics
+        try:
+            self.last_dw_norm = float(np.linalg.norm(dw))
+            self.last_db_norm = float(np.linalg.norm(db))
+        except Exception:
+            self.last_dw_norm = 0.0
+            self.last_db_norm = 0.0
+        
+        dw = np.clip(dw, -1, 1)
+        db = np.clip(db, -1, 1)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
         return dx
     
-    def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.001, entropy_beta=0.001):
+    def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.0001, entropy_beta=0.02):
         batch_size = self.input.shape[0]
         
-        dz = np.zeros_like(self.output)
-        batch_idx = np.arange(self.input.shape[0])
+        dz = self.output * ppo_weight[:, None]
+        batch_idx = np.arange(batch_size)
         action_idx = np.argmax(actions_one_hot, axis=1)
 
-        dz[batch_idx, action_idx] = ppo_weight
-        dz -= self.output * ppo_weight[:, None]
-        dz += entropy_beta * (np.log(self.output + 1e-8) + 1)
-        
+        dz[batch_idx, action_idx] -= ppo_weight
+
+        if entropy_beta != 0.0:
+            # gradient of entropy H = -sum p log p w.r.t. logits z is: dH/dz_j = p_j * (H - log p_j)
+            # for loss = actor_loss - entropy_coef * H, add: -entropy_coef * dH/dz = entropy_coef * p * (log p - H)
+            entropy = -np.sum(self.output * np.log(self.output + 1e-8), axis=1)
+            dz += entropy_beta * self.output * (np.log(self.output + 1e-8) + entropy[:, None])
+
         dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
+
+        # record parameter gradient norms for diagnostics
+        try:
+            self.last_dw_norm = float(np.linalg.norm(dw))
+            self.last_db_norm = float(np.linalg.norm(db))
+        except Exception:
+            self.last_dw_norm = 0.0
+            self.last_db_norm = 0.0
+
+        dw = np.clip(dw, -1, 1)
+        db = np.clip(db, -1, 1)
         
-        dw = np.clip(dw, -5, 5)
-        db = np.clip(db, -5, 5)
-        
-        self.weights += learning_rate * dw
-        self.biases += learning_rate * db
+        self.weights -= learning_rate * dw
+        self.biases -= learning_rate * db
         
         return dx
-    
-    def backward_prop(self, da, learning_rate=0.001):
+    def backward_prop(self, da, learning_rate=0.0001):
         batch_size = self.input.shape[0]
         
         dz = da * self.derivative_ReLu(self.pre_activated)
@@ -91,8 +113,8 @@ class Dense():
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
         
-        dw = np.clip(dw, -5, 5)
-        db = np.clip(db, -5, 5)
+        dw = np.clip(dw, -1, 1)
+        db = np.clip(db, -1, 1)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db

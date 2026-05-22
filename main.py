@@ -13,7 +13,7 @@ if __name__ == "__main__":
     conv2_out = pool_out - KERNEL_SIZE + 1
 
     flat_size = (CONV_DEPTH * 2) * conv2_out * conv2_out
-    dense_input = flat_size + 11
+    dense_input = flat_size + 12
 
     feature_layers = []
     actor_layers = []
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     feature_layers.append(nn.create_max_pool_layer(2)) # output is 9x9x8
     feature_layers.append(nn.create_convolution_layer((CONV_DEPTH, conv1_out, conv1_out), KERNEL_SIZE, CONV_DEPTH * 2)) # output is 7x7x16
     feature_layers.append(nn.create_reshape_layer((CONV_DEPTH * 2, conv2_out, conv2_out), (flat_size, 1)))
-    feature_layers.append(nn.create_dense_layer(128, dense_input)) # (7x7x16 + 11) x 128 = 101,760 parameters
+    feature_layers.append(nn.create_dense_layer(128, dense_input)) # (7x7x16 + 12) x 128 = 101888 parameters
     nn.feature_layers = feature_layers
     
     #create actor network
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     epoch_max = 0
     entropy_min = 2
     while True:
-        epoch_avg = t.train(epochs=5, episodes=64)
+        epoch_avg, entropy_avg = t.train(epochs=5, episodes=64, verbose=False)
         
         if(epoch_avg > epoch_max):
             epoch_max = epoch_avg
@@ -52,8 +52,8 @@ if __name__ == "__main__":
         else:
             print(f"epoch_avg: {epoch_avg:.3f}")
         
-        # if(entropy_avg < entropy_min):
-        #     entropy_min = entropy_avg
-        #     print(f"entropy_avg: {entropy_avg:.3f} ****** New Min ******")
-        # else:
-        #     print(f"entropy_avg: {entropy_avg:.3f}")
+        if(entropy_avg < entropy_min):
+            entropy_min = entropy_avg
+            print(f"entropy_avg: {entropy_avg:.3f} ****** New Min ******")
+        else:
+            print(f"entropy_avg: {entropy_avg:.3f}")

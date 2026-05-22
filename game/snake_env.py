@@ -49,7 +49,7 @@ class Snake_Env():
     
     def step(self, direction):
         reward = 0
-        reward -= 0.0005 #small step penalty
+        # reward -= 0.0005 #small step penalty
         # reward += 0.01   # survival bonus per step
         turn = np.argmax(direction)
         self.set_direction(turn)
@@ -91,14 +91,14 @@ class Snake_Env():
                 self.running = False
                 return reward - 1
         
-        #Manhattan distance calculation to see if snake is closer to food
-        new_dist = abs(new_head[0] - self.food[0]) + abs(new_head[1] - self.food[1])
-        old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
+        # #Manhattan distance calculation to see if snake is closer to food
+        # new_dist = abs(new_head[0] - self.food[0]) + abs(new_head[1] - self.food[1])
+        # old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
         
-        if new_dist < old_dist:
-            reward += 0.05 #makes stepping in direction of food more positive
-        else:
-            reward -= 0.05
+        # if new_dist < old_dist:
+        #     reward += 0.05 #makes stepping in direction of food more positive
+        # else:
+        #     reward -= 0.05
 
         #check if new_head is over food
         if new_head[0] == self.food[0] and new_head[1] == self.food[1]:
@@ -190,4 +190,8 @@ class Snake_Env():
         dx_food = (self.head[0] - self.food[0]) / self.size
         dy_food = (self.head[1] - self.food[1]) / self.size
         
-        return boards, self.direction, length, distance_to_danger_up, distance_to_danger_right, distance_to_danger_down, distance_to_danger_left, dx_food, dy_food
+        running = 1.0
+        if not self.running:
+            running = 0.0
+        
+        return boards, self.direction, length, distance_to_danger_up, distance_to_danger_right, distance_to_danger_down, distance_to_danger_left, dx_food, dy_food, running

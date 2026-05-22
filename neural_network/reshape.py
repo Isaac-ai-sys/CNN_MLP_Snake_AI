@@ -6,7 +6,7 @@ class Reshape():
         self.output_shape = output_shape
         self.batch_input_shape = None        # set during forward, includes batch dim
     
-    def forward_prop(self, input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food):
+    def forward_prop(self, input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running):
         self.batch_input_shape = input.shape
         batch_size = input.shape[0]
         
@@ -20,7 +20,8 @@ class Reshape():
             np.atleast_1d(danger_down),
             np.atleast_1d(danger_left),
             np.atleast_1d(dx_food),
-            np.atleast_1d(dy_food)
+            np.atleast_1d(dy_food),
+            np.atleast_1d(running)
         ], axis=1)  # shape: (batch_size, 7)
         
         return np.concatenate([flat_input, flat_direction, extras], axis=1)
