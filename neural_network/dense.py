@@ -1,4 +1,7 @@
-import numpy as np
+try:
+    import cupy as np
+except:
+    import numpy as np
 
 class Dense():
     def __init__(self, neurons, inputs):
@@ -8,10 +11,10 @@ class Dense():
         self.last_db_norm = 0.0
     
     def ReLu(self, pre_activated):
-        return np.maximum(0, pre_activated)
-    
+        return np.where(pre_activated > 0, pre_activated, 0.01 * pre_activated)
+
     def derivative_ReLu(self, pre_activated):
-        return (pre_activated > 0).astype(np.float32)
+        return np.where(pre_activated > 0, 1.0, 0.01).astype(np.float32)
     
     def softmax(self, z):
         z = z - np.max(z, axis=1, keepdims=True)
@@ -21,6 +24,7 @@ class Dense():
     def forward_prop(self, input):
         if input.ndim == 1:
             input = input[None, :]
+        input = np.asarray(input)
         self.input = input
         self.pre_activated = self.input @ self.weights.T + self.biases
         self.output = self.ReLu(self.pre_activated)
@@ -29,6 +33,7 @@ class Dense():
     def forward_prop_softmax(self, input):
         if input.ndim == 1:
             input = input[None, :]
+        input = np.asarray(input)
         self.input = input
         self.pre_activated_output = self.input @ self.weights.T + self.biases
         self.output = self.softmax(self.pre_activated_output)
@@ -37,12 +42,14 @@ class Dense():
     def forward_prop_value(self, input):
         if input.ndim == 1:
             input = input[None, :]
+        input = np.asarray(input)
         self.input = input
         self.pre_activated_output = self.input @ self.weights.T + self.biases
         self.output = self.pre_activated_output
         return self.output
 
     def backward_prop_value(self, target, learning_rate=0.001, value_loss_coef=1.0):
+        target = np.asarray(target)
         batch_size = self.input.shape[0]
         target = target.reshape(-1, 1)
         self.output = self.output.reshape(-1, 1)
@@ -63,8 +70,8 @@ class Dense():
             self.last_dw_norm = 0.0
             self.last_db_norm = 0.0
         
-        dw = np.clip(dw, -1, 1)
-        db = np.clip(db, -1, 1)
+        dw = np.clip(dw, -5, 5)
+        db = np.clip(db, -5, 5)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
@@ -72,6 +79,8 @@ class Dense():
     
     def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.0001, entropy_beta=0.02):
         batch_size = self.input.shape[0]
+        actions_one_hot = np.asarray(actions_one_hot)
+        ppo_weight = np.asarray(ppo_weight)
         
         dz = self.output * ppo_weight[:, None]
         batch_idx = np.arange(batch_size)
@@ -97,8 +106,8 @@ class Dense():
             self.last_dw_norm = 0.0
             self.last_db_norm = 0.0
 
-        dw = np.clip(dw, -1, 1)
-        db = np.clip(db, -1, 1)
+        dw = np.clip(dw, -5, 5)
+        db = np.clip(db, -5, 5)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
@@ -106,15 +115,24 @@ class Dense():
         return dx
     def backward_prop(self, da, learning_rate=0.0001):
         batch_size = self.input.shape[0]
+        da = np.asarray(da)
         
         dz = da * self.derivative_ReLu(self.pre_activated)
         
         dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)
         dx = dz @ self.weights
+
+        # record parameter gradient norms for diagnostics
+        try:
+            self.last_dw_norm = float(np.linalg.norm(dw))
+            self.last_db_norm = float(np.linalg.norm(db))
+        except Exception:
+            self.last_dw_norm = 0.0
+            self.last_db_norm = 0.0
         
-        dw = np.clip(dw, -1, 1)
-        db = np.clip(db, -1, 1)
+        dw = np.clip(dw, -5, 5)
+        db = np.clip(db, -5, 5)
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db

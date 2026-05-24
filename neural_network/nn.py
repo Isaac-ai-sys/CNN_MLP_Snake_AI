@@ -1,4 +1,7 @@
-import numpy as np
+try:
+    import cupy as np
+except:
+    import numpy as np
 from neural_network.convolution import Convolution
 from neural_network.dense import Dense
 from neural_network.reshape import Reshape
@@ -64,11 +67,15 @@ class NN():
         min_std = 1e-2
         actor_dx /= max(actor_std, min_std)
         critic_dx /= max(critic_std, min_std)
-        feature_input = actor_dx + critic_dx
+        # nn.py — current
+        feature_input = actor_dx + 0.5 * critic_dx
+        # feature_input = np.clip(feature_input, -1, 1)
         feature_input /= max(np.std(feature_input), min_std)
         # print(f"feature input std (entering feature layers): {np.std(feature_input):.6f}")  # should be ~1.0
+        # print(f"gradient entering feature layers std: {np.std(feature_input):.6f}")
         for layer in reversed(self.feature_layers):
             feature_input = layer.backward_prop(feature_input, actor_learning_rate)
+            # print(f"  after {type(layer).__name__}: std={np.std(feature_input):.6f}")
         
         # print(f"actor_dx std: {np.std(actor_dx):.6f}")
         # print(f"critic_dx std: {np.std(critic_dx):.6f}")
@@ -103,6 +110,33 @@ class NN():
         for i in range(len(self.feature_layers)):
             self.feature_layers[i].load(f"{self.save_dir}/feature/layer{i}.npz")
     
+    def choose_actions_batch(self, input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running, epsilon=0.0):
+        input = np.asarray(input)
+        direction = np.asarray(direction)
+
+        if input.ndim == 3:
+            input = input[None, :]
+            direction = direction[None, :]
+
+        batch_size = input.shape[0]
+        probs, values = self.forward_prop(input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running)
+
+        cumprobs = probs.cumsum(axis=1)
+        rand = np.random.rand(batch_size, 1).astype(probs.dtype)
+        action_indices = np.argmax(cumprobs >= rand, axis=1)
+
+        if epsilon > 0.0:
+            random_actions = np.random.randint(0, probs.shape[1], size=batch_size)
+            explore = np.random.rand(batch_size) < epsilon
+            action_indices = np.where(explore, random_actions, action_indices)
+
+        action_one_hot = np.zeros_like(probs)
+        batch_idx = np.arange(batch_size)
+        action_one_hot[batch_idx, action_indices] = 1
+
+        log_probs = np.log(probs[batch_idx, action_indices] + 1e-8)
+        return action_one_hot, action_indices, values, log_probs
+
     def choose_action(self, input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running, epsilon=0.0):
         # ensure single sample
         input = np.array(input)
@@ -112,19 +146,28 @@ class NN():
             input = input[None, :]
             direction = direction[None, :]
 
-        probs, values = self.forward_prop(input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running)
-        
-        # extract first (and only) sample
-        probs = probs[0]
+        action_one_hot, action_indices, values, log_probs = self.choose_actions_batch(
+            input,
+            direction,
+            length,
+            danger_up,
+            danger_right,
+            danger_down,
+            danger_left,
+            dx_food,
+            dy_food,
+            running,
+            epsilon
+        )
+        action = action_one_hot[0]
         value = values[0]
+        log_prob = log_probs[0]
 
-        if np.random.rand() < epsilon:
-            action = np.random.randint(len(probs))
-        else:
-            action = np.random.choice(len(probs), p=probs)
-        log_prob = np.log(probs[action] + 1e-8)
+        # GPU -> CPU
+        to_cpu = lambda x: x.get() if hasattr(x, "get") else x
 
-        result = np.zeros(len(probs))
-        result[action] = 1
-
-        return result, value, log_prob
+        return (
+            to_cpu(action),
+            to_cpu(value),
+            to_cpu(log_prob)
+        )

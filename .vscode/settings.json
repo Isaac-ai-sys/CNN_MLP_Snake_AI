@@ -1,8 +1,11 @@
 {
     "cSpell.words": [
         "argwhere",
+        "Backpropogation",
+        "cupy",
         "dout",
         "keepdims",
+        "multinomial",
         "randn"
     ]
 }

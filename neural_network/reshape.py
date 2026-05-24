@@ -1,44 +1,77 @@
-import numpy as np
+try:
+    import cupy as np
+except:
+    import numpy as np
+import math
+
 
 class Reshape():
     def __init__(self, input_shape, output_shape):
-        self.input_shape = input_shape       # static conv output shape (no batch)
+        self.input_shape = input_shape
         self.output_shape = output_shape
-        self.batch_input_shape = None        # set during forward, includes batch dim
-    
-    def forward_prop(self, input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running):
-        self.batch_input_shape = input.shape
+
+    def forward_prop(
+        self,
+        input,
+        direction,
+        length,
+        danger_up,
+        danger_right,
+        danger_down,
+        danger_left,
+        dx_food,
+        dy_food,
+        running
+    ):
+
+        # ensure CuPy arrays
+        input = np.asarray(input)
+        direction = np.asarray(direction)
+
         batch_size = input.shape[0]
-        
+
         flat_input = input.reshape(batch_size, -1)
         flat_direction = direction.reshape(batch_size, -1)
-        
-        extras = np.stack([
-            np.atleast_1d(length),
-            np.atleast_1d(danger_up),
-            np.atleast_1d(danger_right),
-            np.atleast_1d(danger_down),
-            np.atleast_1d(danger_left),
-            np.atleast_1d(dx_food),
-            np.atleast_1d(dy_food),
-            np.atleast_1d(running)
-        ], axis=1)  # shape: (batch_size, 7)
-        
-        return np.concatenate([flat_input, flat_direction, extras], axis=1)
-    
-    def backward_prop(self, output_gradient, learning_rate=0.001):
-        input_size = np.prod(self.batch_input_shape[1:])  # C*H*W
-        grad_input = output_gradient[:, :input_size]
-        return grad_input.reshape(self.batch_input_shape)  # (N, C, H, W)
+
+        extras_list = []
+        for value in (
+            length,
+            danger_up,
+            danger_right,
+            danger_down,
+            danger_left,
+            dx_food,
+            dy_food,
+            running
+        ):
+            value_arr = np.asarray(value, dtype=np.float32)
+            if value_arr.ndim == 0:
+                value_arr = np.full((batch_size, 1), value_arr, dtype=np.float32)
+            elif value_arr.ndim == 1:
+                if value_arr.shape[0] != batch_size:
+                    raise ValueError(
+                        f"Expected batch length {batch_size} for extra feature, got {value_arr.shape}"
+                    )
+                value_arr = value_arr.reshape(batch_size, 1)
+            else:
+                value_arr = value_arr.reshape(batch_size, -1)
+            extras_list.append(value_arr)
+
+        extras = np.concatenate(extras_list, axis=1)
+
+        return np.concatenate(
+            [flat_input, flat_direction, extras],
+            axis=1
+        )
+
+    def backward_prop(self, output, learning_rate=0.001):
+        output = np.asarray(output)
+        return output[:, :math.prod(self.input_shape)].reshape(
+            (-1, *self.input_shape)
+        )
     
     def save(self, filename):
-        np.savez(filename,
-                 input_shape=self.input_shape,
-                 output_shape=self.output_shape,
-                 batch_input_shape = self.batch_input_shape)
+        return
     
     def load(self, filename):
-        data = np.load(filename, allow_pickle=True)
-        self.input_shape = data["input_shape"]
-        self.output_shape = data["output_shape"]
-        self.batch_input_shape = data["batch_input_shape"]
+        return

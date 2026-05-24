@@ -1,7 +1,10 @@
 import pygame
 #from neural_network.nn import NN
 from snake_env import Snake_Env
-import numpy as np
+try:
+    import cupy as np
+except:
+    import numpy as np
 
 class Game():
     def __init__(self):
