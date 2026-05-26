@@ -50,9 +50,12 @@ class Snake_Env():
     def step(self, direction):
         reward = 0
         reward -= 0.001  # small step penalty
-        reward += 0.005   # survival bonus per step
+        reward += 0.005  # small survival bonus
         old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
-        turn = np.argmax(direction)
+        if np.ndim(direction) == 0:
+            turn = int(direction)
+        else:
+            turn = np.argmax(direction)
         self.set_direction(turn)
         
         #calculate new_head
@@ -116,7 +119,7 @@ class Snake_Env():
             zeros = np.argwhere(self.snake_board == 0)
             
             if len(zeros) == 0:
-                reward += 2
+                reward += 10
                 self.running = False
                 return reward
             

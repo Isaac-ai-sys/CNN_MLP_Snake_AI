@@ -214,7 +214,7 @@ class Train():
 
         return advantages
     
-    def train(self, epochs=100, episodes=100, max_steps=100, actor_learning_rate=0.0003, critic_learning_rate=0.0003, value_loss_coef=0.5, entropy_coef=0.01, verbose=False, advantage_scale=2.0, epsilon=0.0, target_kl=0.03, min_actor_lr=1e-6):
+    def train(self, epochs=100, episodes=100, max_steps=1000, actor_learning_rate=0.0001, critic_learning_rate=0.0001, value_loss_coef=0.5, entropy_coef=0.1, verbose=False, advantage_scale=2.0, epsilon=0.0, target_kl=0.3, min_actor_lr=1e-6):
         epoch_avg = 0
         entropy_avg = 0
         gradient_updates = 0
@@ -293,8 +293,8 @@ class Train():
                 if verbose:
                     print(f"Applied advantage_scale={advantage_scale}")
 
-            eps = 0.1
-            batch_size = 512
+            eps = 0.2
+            batch_size = min(len(all_states) // 32, 2056)
             gradient_epochs = 3
             
             # Compute old log probs once from the current (pre-update) policy
@@ -323,11 +323,11 @@ class Train():
             debug_old_log_probs_time = end_old_log_probs - start
 
             start_grad = time.perf_counter()
-            # early_stopped = False
+            early_stopped = False
             for g in range(gradient_epochs):
-                # if early_stopped:
-                #     break
-                # stop_update = False
+                if early_stopped:
+                    break
+                stop_update = False
                 idx = np.random.permutation(len(all_states))
                 grad_epoch_start = time.perf_counter()
                 batch_count = 0
@@ -368,15 +368,15 @@ class Train():
                         new_probs[np.arange(len(action_indices)), action_indices] + 1e-8
                     )
 
-                    # # approximate KL(old || new) on this minibatch
-                    # approx_kl = np.mean(old_log_probs[indices] - new_log_probs)
-                    # if approx_kl > target_kl:
-                    #     if verbose:
-                    #         print(f"  early stopping: approx_kl={approx_kl:.6f} > target_kl={target_kl:.6f}")
-                    #     # be more conservative for subsequent updates in this epoch
-                    #     actor_learning_rate_epoch = max(actor_learning_rate_epoch * 0.5, min_actor_lr)
-                    #     stop_update = True
-                    #     early_stopped = True
+                    # approximate KL(old || new) on this minibatch
+                    approx_kl = np.mean(old_log_probs[indices] - new_log_probs)
+                    if approx_kl > target_kl:
+                        if verbose:
+                            print(f"  early stopping: approx_kl={approx_kl:.6f} > target_kl={target_kl:.6f}")
+                        # be more conservative for subsequent updates in this epoch
+                        actor_learning_rate_epoch = max(actor_learning_rate_epoch * 0.5, min_actor_lr)
+                        stop_update = True
+                        early_stopped = True
 
                     ratio = np.exp(new_log_probs - old_log_probs[indices])
 
@@ -412,8 +412,8 @@ class Train():
                         value_loss_coef=value_loss_coef,
                     )
 
-                    # if stop_update:
-                    #     break
+                    if stop_update:
+                        break
                     
                     if verbose:
                         actor_dw = np.asarray([getattr(layer, 'last_dw_norm', 0.0) for layer in self.nn.actor_layers], dtype=np.float32)
