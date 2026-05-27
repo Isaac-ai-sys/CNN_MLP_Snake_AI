@@ -50,7 +50,6 @@ class Snake_Env():
     def step(self, direction):
         reward = 0
         reward -= 0.001  # small step penalty
-        reward += 0.005  # small survival bonus
         old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
         if np.ndim(direction) == 0:
             turn = int(direction)
@@ -64,28 +63,28 @@ class Snake_Env():
             case 0:
                 if self.head[1] == self.size - 1:
                     self.running = False
-                    return reward - 1
+                    return reward - 2
                 else:
                     new_head[0] = self.head[0]
                     new_head[1] = self.head[1] + 1
             case 1:
                 if self.head[0] == self.size - 1:
                     self.running = False
-                    return reward - 1
+                    return reward - 2
                 else:
                     new_head[0] = self.head[0] + 1
                     new_head[1] = self.head[1]
             case 2:
                 if self.head[1] == 0:
                     self.running = False
-                    return reward - 1
+                    return reward - 2
                 else:
                     new_head[0] = self.head[0]
                     new_head[1] = self.head[1] - 1
             case 3:
                 if self.head[0] == 0:
                     self.running = False
-                    return reward - 1
+                    return reward - 2
                 else:
                     new_head[0] = self.head[0] - 1
                     new_head[1] = self.head[1]
@@ -93,7 +92,7 @@ class Snake_Env():
             # allow moving into tail ONLY if tail moves away this step
             if not (new_head[0] == self.tail[0] and new_head[1] == self.tail[1]):
                 self.running = False
-                return reward - 1
+                return reward - 2
         
         new_dist = abs(new_head[0] - self.food[0]) + abs(new_head[1] - self.food[1])
         reward += 0.04 * (old_dist - new_dist)  # small shaping signal
