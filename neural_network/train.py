@@ -214,7 +214,7 @@ class Train():
 
         return advantages
     
-    def train(self, epochs=100, episodes=100, max_steps=1000, actor_learning_rate=0.0001, critic_learning_rate=0.0001, value_loss_coef=0.5, entropy_coef=0.1, verbose=False, advantage_scale=2.0, epsilon=0.0, target_kl=0.3, min_actor_lr=1e-6):
+    def train(self, epochs=100, episodes=100, max_steps=1000, actor_learning_rate=0.0003, critic_learning_rate=0.0003, value_loss_coef=0.5, entropy_coef=0.15, verbose=False, advantage_scale=2.0, epsilon=0.0, target_kl=0.3, min_actor_lr=1e-6):
         epoch_avg = 0
         entropy_avg = 0
         gradient_updates = 0
@@ -295,7 +295,7 @@ class Train():
 
             eps = 0.2
             batch_size = min(len(all_states) // 32, 2056)
-            gradient_epochs = 3
+            gradient_epochs = 1
             
             # Compute old log probs once from the current (pre-update) policy
             start = time.perf_counter()
