@@ -48,7 +48,7 @@ class Dense():
         self.output = self.pre_activated_output
         return self.output
 
-    def backward_prop_value(self, target, learning_rate=0.001, value_loss_coef=1.0):
+    def backward_prop_value(self, target, learning_rate=0.001, value_loss_coef=1.0, max_grad_norm=0.5):
         target = np.asarray(target)
         batch_size = self.input.shape[0]
         target = target.reshape(-1, 1)
@@ -69,15 +69,21 @@ class Dense():
         except Exception:
             self.last_dw_norm = 0.0
             self.last_db_norm = 0.0
-        
-        dw = np.clip(dw, -5, 5)
-        db = np.clip(db, -5, 5)
+
+        # compute global norm
+        grad_norm = np.sqrt(np.sum(dw**2) + np.sum(db**2))
+
+        if grad_norm > max_grad_norm:
+            scale = max_grad_norm / (grad_norm + 1e-8)
+
+            dw *= scale
+            db *= scale
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
         return dx
     
-    def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.0001, entropy_beta=0.02):
+    def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.0001, entropy_beta=0.02, max_grad_norm=0.5):
         batch_size = self.input.shape[0]
         actions_one_hot = np.asarray(actions_one_hot)
         ppo_weight = np.asarray(ppo_weight)
@@ -106,14 +112,20 @@ class Dense():
             self.last_dw_norm = 0.0
             self.last_db_norm = 0.0
 
-        dw = np.clip(dw, -5, 5)
-        db = np.clip(db, -5, 5)
+        # compute global norm
+        grad_norm = np.sqrt(np.sum(dw**2) + np.sum(db**2))
+
+        if grad_norm > max_grad_norm:
+            scale = max_grad_norm / (grad_norm + 1e-8)
+
+            dw *= scale
+            db *= scale
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db
         
         return dx
-    def backward_prop(self, da, learning_rate=0.0001):
+    def backward_prop(self, da, learning_rate=0.0001, max_grad_norm=0.5):
         batch_size = self.input.shape[0]
         da = np.asarray(da)
         
@@ -131,8 +143,14 @@ class Dense():
             self.last_dw_norm = 0.0
             self.last_db_norm = 0.0
         
-        dw = np.clip(dw, -5, 5)
-        db = np.clip(db, -5, 5)
+        # compute global norm
+        grad_norm = np.sqrt(np.sum(dw**2) + np.sum(db**2))
+
+        if grad_norm > max_grad_norm:
+            scale = max_grad_norm / (grad_norm + 1e-8)
+
+            dw *= scale
+            db *= scale
         
         self.weights -= learning_rate * dw
         self.biases -= learning_rate * db

@@ -50,6 +50,7 @@ class Snake_Env():
     def step(self, direction):
         reward = 0
         reward -= 0.001  # small step penalty
+        reward += 0.005  # survival bonus
         old_dist = abs(self.head[0] - self.food[0]) + abs(self.head[1] - self.food[1])
         if np.ndim(direction) == 0:
             turn = int(direction)

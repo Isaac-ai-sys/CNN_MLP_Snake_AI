@@ -156,7 +156,8 @@ class Convolution:
     def backward_prop(
         self,
         output,
-        learning_rate=0.001
+        learning_rate=0.001,
+        max_grad_norm=0.5
     ):
 
         if USE_GPU and not isinstance(output, xp.ndarray):
@@ -308,17 +309,16 @@ class Convolution:
         # Gradient clipping
         # ---------------------------------------
 
-        kernels_gradient = xp.clip(
-            kernels_gradient,
-            -5.0,
-            5.0
+        grad_norm = xp.sqrt(
+            xp.sum(kernels_gradient ** 2) +
+            xp.sum(bias_gradient ** 2)
         )
 
-        bias_gradient = xp.clip(
-            bias_gradient,
-            -5.0,
-            5.0
-        )
+        if grad_norm > max_grad_norm:
+            scale = max_grad_norm / (grad_norm + 1e-8)
+
+            kernels_gradient *= scale
+            bias_gradient *= scale
 
         # ---------------------------------------
         # SGD update

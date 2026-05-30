@@ -25,25 +25,26 @@ if __name__ == "__main__":
     feature_layers.append(nn.create_max_pool_layer(2)) # output is 9x9x8
     feature_layers.append(nn.create_convolution_layer((CONV_DEPTH, pool_out, pool_out), KERNEL_SIZE, CONV_DEPTH * 2)) # output is 7x7x16
     feature_layers.append(nn.create_reshape_layer((CONV_DEPTH * 2, conv2_out, conv2_out), (flat_size, 1)))
-    feature_layers.append(nn.create_dense_layer(128, dense_input)) # (7x7x16 + 12) x 128 = 101888 parameters
+    feature_layers.append(nn.create_dense_layer(64, dense_input)) # (7x7x16 + 12) x 64 = 50,944 parameters
     nn.feature_layers = feature_layers
     
     #create actor network
-    actor_layers.append(nn.create_dense_layer(32, 128)) # 128x32 = 4096 parameters
-    actor_layers.append(nn.create_dense_layer(4, 32)) # 32x4 = 128 parameters
+    actor_layers.append(nn.create_dense_layer(32, 64)) # 64x32 = 2048 parameters
+    actor_layers.append(nn.create_dense_layer(16, 32)) #  16x32 = 512 parameters
+    actor_layers.append(nn.create_dense_layer(4, 16)) # 16x4 = 64 parameters
     nn.actor_layers = actor_layers
     
     #create critic network
-    critic_layers.append(nn.create_dense_layer(32, 128)) # 128x32 = 4096 parameters
+    critic_layers.append(nn.create_dense_layer(32, 64)) # 64x32 = 2048 parameters
     critic_layers.append(nn.create_dense_layer(1, 32)) # 32x1 = parameters
     nn.critic_layers = critic_layers
 
-    nn.load()
+    # nn.load()
     t = Train(nn, board_size=BOARD_SIZE)
     epoch_max = 0
     entropy_min = 2
     while True:
-        epoch_avg, entropy_avg = t.train(epochs=5, episodes=64, verbose=False, epsilon=0.0)
+        epoch_avg, entropy_avg = t.train(epochs=10, episodes=64, verbose=False, epsilon=0.2)
         
         if(epoch_avg > epoch_max):
             epoch_max = epoch_avg
