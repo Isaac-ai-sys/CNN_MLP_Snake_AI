@@ -214,12 +214,12 @@ class Train():
 
         return advantages
     
-    def train(self, epochs=100, episodes=100, max_steps=100, actor_learning_rate=0.0001, critic_learning_rate=0.0001, value_loss_coef=0.5, entropy_coef=0.05, verbose=False, advantage_scale=2.0, epsilon=0.1, target_kl=0.015, min_actor_lr=1e-6):
+    def train(self, epochs=100, episodes=100, max_steps=10000, actor_learning_rate=0.0001, critic_learning_rate=0.0001, value_loss_coef=0.5, entropy_coef=0.05, verbose=False, advantage_scale=1.0, epsilon=0.1, target_kl=0.05, min_actor_lr=1e-6):
         epoch_avg = 0
         entropy_avg = 0
         gradient_updates = 0
         epsilon_end = 0
-        epsilon_decay = 0.7
+        epsilon_decay = 0.98
         for e in range(epochs):
             episode_data = []
             snake_length_sum = 0
@@ -236,7 +236,7 @@ class Train():
                 max_steps,
                 episodes,
                 epsilon=epsilon,
-                num_parallel_envs=min(16, episodes)
+                num_parallel_envs=min(32, episodes)
             )
             end = time.perf_counter()
 
@@ -294,31 +294,29 @@ class Train():
                     print(f"Applied advantage_scale={advantage_scale}")
 
             eps = 0.1
-            batch_size = min(len(all_states) // 32, 2056)
-            gradient_epochs = 4
+            batch_size = 1024
+            gradient_epochs = 3
             
             # Compute old log probs once from the current (pre-update) policy
+            # Use a single batched forward pass (much faster on GPU/backends)
             start = time.perf_counter()
             debug_num_states = len(all_states)
             debug_num_batches = (debug_num_states + batch_size - 1) // batch_size
-            old_log_probs = []
-            for i in range(0, len(all_states), batch_size):
-                s = all_states[i:i+batch_size]
-                d = all_directions[i:i+batch_size]
-                l = all_lengths[i:i+batch_size]
-                a = all_actions[i:i+batch_size]
-                du = all_distances_to_danger_up[i:i+batch_size]
-                dr = all_distances_to_danger_right[i:i+batch_size]
-                dd = all_distances_to_danger_down[i:i+batch_size]
-                dl = all_distances_to_danger_left[i:i+batch_size]
-                dx = all_dx_foods[i:i+batch_size]
-                dy = all_dy_foods[i:i+batch_size]
-                runs = all_runnings[i:i+batch_size]
-                probs, _ = self.nn.forward_prop(s, d, l, du, dr, dd, dl, dx, dy, runs)
-                action_indices = np.argmax(a, axis=1)
-                lp = np.log(probs[np.arange(len(action_indices)), action_indices] + 1e-8)
-                old_log_probs.append(lp)
-            old_log_probs = np.concatenate(old_log_probs)
+            # forward the entire dataset in one call (memory permitting)
+            probs, _ = self.nn.forward_prop(
+                all_states,
+                all_directions,
+                all_lengths,
+                all_distances_to_danger_up,
+                all_distances_to_danger_right,
+                all_distances_to_danger_down,
+                all_distances_to_danger_left,
+                all_dx_foods,
+                all_dy_foods,
+                all_runnings
+            )
+            action_indices = np.argmax(all_actions, axis=1)
+            old_log_probs = np.log(probs[np.arange(len(action_indices)), action_indices] + 1e-8)
             end_old_log_probs = time.perf_counter()
             debug_old_log_probs_time = end_old_log_probs - start
 
@@ -422,6 +420,7 @@ class Train():
 
                     # raw_avg = snake_length_sum / episodes
                     # print(f"Epoch {e}: avg_length={raw_avg:.2f}, grad_epochs_run={g+1}")
+                    np.get_default_memory_pool().free_all_blocks()
                 grad_epoch_end = time.perf_counter()
                 if True:  # Set to True to debug gradient epoch timing
                     print(f"  Grad epoch {g}: {grad_epoch_end - grad_epoch_start:.3f}s ({batch_count} batches)")

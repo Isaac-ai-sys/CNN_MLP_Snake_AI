@@ -9,6 +9,12 @@ class Dense():
         self.biases = np.zeros(neurons)
         self.last_dw_norm = 0.0
         self.last_db_norm = 0.0
+        # Adam optimizer state
+        self.adam_m_w = np.zeros_like(self.weights)
+        self.adam_v_w = np.zeros_like(self.weights)
+        self.adam_m_b = np.zeros_like(self.biases)
+        self.adam_v_b = np.zeros_like(self.biases)
+        self.adam_t = 0
     
     def ReLu(self, pre_activated):
         return np.where(pre_activated > 0, pre_activated, 0.01 * pre_activated)
@@ -48,7 +54,7 @@ class Dense():
         self.output = self.pre_activated_output
         return self.output
 
-    def backward_prop_value(self, target, learning_rate=0.001, value_loss_coef=1.0, max_grad_norm=0.5):
+    def backward_prop_value(self, target, learning_rate=0.001, value_loss_coef=1.0, max_grad_norm=0.5, optimizer='sgd'):
         target = np.asarray(target)
         batch_size = self.input.shape[0]
         target = target.reshape(-1, 1)
@@ -79,11 +85,30 @@ class Dense():
             dw *= scale
             db *= scale
         
-        self.weights -= learning_rate * dw
-        self.biases -= learning_rate * db
+        if optimizer == 'adam':
+            # Adam update
+            beta1 = 0.9
+            beta2 = 0.999
+            eps = 1e-8
+            self.adam_t += 1
+
+            self.adam_m_w = beta1 * self.adam_m_w + (1 - beta1) * dw
+            self.adam_v_w = beta2 * self.adam_v_w + (1 - beta2) * (dw ** 2)
+            m_hat_w = self.adam_m_w / (1 - beta1 ** self.adam_t)
+            v_hat_w = self.adam_v_w / (1 - beta2 ** self.adam_t)
+            self.weights -= learning_rate * m_hat_w / (np.sqrt(v_hat_w) + eps)
+
+            self.adam_m_b = beta1 * self.adam_m_b + (1 - beta1) * db
+            self.adam_v_b = beta2 * self.adam_v_b + (1 - beta2) * (db ** 2)
+            m_hat_b = self.adam_m_b / (1 - beta1 ** self.adam_t)
+            v_hat_b = self.adam_v_b / (1 - beta2 ** self.adam_t)
+            self.biases -= learning_rate * m_hat_b / (np.sqrt(v_hat_b) + eps)
+        else:
+            self.weights -= learning_rate * dw
+            self.biases -= learning_rate * db
         return dx
     
-    def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.0001, entropy_beta=0.02, max_grad_norm=0.5):
+    def backward_prop_softmax(self, actions_one_hot, ppo_weight, learning_rate=0.0001, entropy_beta=0.02, max_grad_norm=0.5, optimizer='sgd'):
         batch_size = self.input.shape[0]
         actions_one_hot = np.asarray(actions_one_hot)
         ppo_weight = np.asarray(ppo_weight)
@@ -121,11 +146,29 @@ class Dense():
             dw *= scale
             db *= scale
         
-        self.weights -= learning_rate * dw
-        self.biases -= learning_rate * db
+        if optimizer == 'adam':
+            beta1 = 0.9
+            beta2 = 0.999
+            eps = 1e-8
+            self.adam_t += 1
+
+            self.adam_m_w = beta1 * self.adam_m_w + (1 - beta1) * dw
+            self.adam_v_w = beta2 * self.adam_v_w + (1 - beta2) * (dw ** 2)
+            m_hat_w = self.adam_m_w / (1 - beta1 ** self.adam_t)
+            v_hat_w = self.adam_v_w / (1 - beta2 ** self.adam_t)
+            self.weights -= learning_rate * m_hat_w / (np.sqrt(v_hat_w) + eps)
+
+            self.adam_m_b = beta1 * self.adam_m_b + (1 - beta1) * db
+            self.adam_v_b = beta2 * self.adam_v_b + (1 - beta2) * (db ** 2)
+            m_hat_b = self.adam_m_b / (1 - beta1 ** self.adam_t)
+            v_hat_b = self.adam_v_b / (1 - beta2 ** self.adam_t)
+            self.biases -= learning_rate * m_hat_b / (np.sqrt(v_hat_b) + eps)
+        else:
+            self.weights -= learning_rate * dw
+            self.biases -= learning_rate * db
         
         return dx
-    def backward_prop(self, da, learning_rate=0.0001, max_grad_norm=0.5):
+    def backward_prop(self, da, learning_rate=0.0001, max_grad_norm=0.5, optimizer='sgd'):
         batch_size = self.input.shape[0]
         da = np.asarray(da)
         
@@ -152,8 +195,26 @@ class Dense():
             dw *= scale
             db *= scale
         
-        self.weights -= learning_rate * dw
-        self.biases -= learning_rate * db
+        if optimizer == 'adam':
+            beta1 = 0.9
+            beta2 = 0.999
+            eps = 1e-8
+            self.adam_t += 1
+
+            self.adam_m_w = beta1 * self.adam_m_w + (1 - beta1) * dw
+            self.adam_v_w = beta2 * self.adam_v_w + (1 - beta2) * (dw ** 2)
+            m_hat_w = self.adam_m_w / (1 - beta1 ** self.adam_t)
+            v_hat_w = self.adam_v_w / (1 - beta2 ** self.adam_t)
+            self.weights -= learning_rate * m_hat_w / (np.sqrt(v_hat_w) + eps)
+
+            self.adam_m_b = beta1 * self.adam_m_b + (1 - beta1) * db
+            self.adam_v_b = beta2 * self.adam_v_b + (1 - beta2) * (db ** 2)
+            m_hat_b = self.adam_m_b / (1 - beta1 ** self.adam_t)
+            v_hat_b = self.adam_v_b / (1 - beta2 ** self.adam_t)
+            self.biases -= learning_rate * m_hat_b / (np.sqrt(v_hat_b) + eps)
+        else:
+            self.weights -= learning_rate * dw
+            self.biases -= learning_rate * db
         
         return dx
     

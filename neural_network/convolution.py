@@ -42,6 +42,12 @@ class Convolution:
             (depth, 1, 1),
             dtype=xp.float32
         )
+        # Adam optimizer state
+        self.adam_m_k = xp.zeros_like(self.kernels)
+        self.adam_v_k = xp.zeros_like(self.kernels)
+        self.adam_m_b = xp.zeros_like(self.biases)
+        self.adam_v_b = xp.zeros_like(self.biases)
+        self.adam_t = 0
 
     def forward_prop(self, input):
 
@@ -157,7 +163,8 @@ class Convolution:
         self,
         output,
         learning_rate=0.001,
-        max_grad_norm=0.5
+        max_grad_norm=0.5,
+        optimizer='sgd'
     ):
 
         if USE_GPU and not isinstance(output, xp.ndarray):
@@ -324,15 +331,35 @@ class Convolution:
         # SGD update
         # ---------------------------------------
 
-        self.kernels -= (
-            learning_rate
-            * kernels_gradient
-        )
+        if optimizer == 'adam':
+            beta1 = 0.9
+            beta2 = 0.999
+            eps = 1e-8
+            self.adam_t += 1
 
-        self.biases -= (
-            learning_rate
-            * bias_gradient[:, None, None]
-        )
+            self.adam_m_k = beta1 * self.adam_m_k + (1 - beta1) * kernels_gradient
+            self.adam_v_k = beta2 * self.adam_v_k + (1 - beta2) * (kernels_gradient ** 2)
+            m_hat_k = self.adam_m_k / (1 - beta1 ** self.adam_t)
+            v_hat_k = self.adam_v_k / (1 - beta2 ** self.adam_t)
+            self.kernels -= learning_rate * m_hat_k / (xp.sqrt(v_hat_k) + eps)
+
+            # Expand bias gradient to (depth,1,1) so Adam state shapes remain consistent
+            bias_grad_exp = bias_gradient[:, None, None]
+            self.adam_m_b = beta1 * self.adam_m_b + (1 - beta1) * bias_grad_exp
+            self.adam_v_b = beta2 * self.adam_v_b + (1 - beta2) * (bias_grad_exp ** 2)
+            m_hat_b = self.adam_m_b / (1 - beta1 ** self.adam_t)
+            v_hat_b = self.adam_v_b / (1 - beta2 ** self.adam_t)
+            self.biases -= learning_rate * m_hat_b / (xp.sqrt(v_hat_b) + eps)
+        else:
+            self.kernels -= (
+                learning_rate
+                * kernels_gradient
+            )
+
+            self.biases -= (
+                learning_rate
+                * bias_gradient[:, None, None]
+            )
 
         return input_gradient
 

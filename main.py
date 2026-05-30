@@ -39,7 +39,7 @@ if __name__ == "__main__":
     critic_layers.append(nn.create_dense_layer(1, 32)) # 32x1 = parameters
     nn.critic_layers = critic_layers
 
-    # nn.load()
+    nn.load()
     t = Train(nn, board_size=BOARD_SIZE)
     epoch_max = 0
     entropy_min = 2

@@ -19,6 +19,8 @@ class NN():
         (self.save_dir / "actor").mkdir(exist_ok=True)
         (self.save_dir / "critic").mkdir(exist_ok=True)
         (self.save_dir / "feature").mkdir(exist_ok=True)
+        # optimizer setting: 'sgd' or 'adam'
+        self.optimizer = 'adam'
     
     def forward_prop(self, state, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running):
         # feature forward prop
@@ -44,19 +46,20 @@ class NN():
         
         return actor_probs, critic_value
     
-    def backward_prop(self, actions_one_hot, ppo_weight, target, actor_learning_rate=0.0001, critic_learning_rate=0.0001, entropy_beta=0.02, value_loss_coef=0.5):
+    def backward_prop(self, actions_one_hot, ppo_weight, target, actor_learning_rate=0.0001, critic_learning_rate=0.0001, entropy_beta=0.02, value_loss_coef=0.5, optimizer=None):
         # actor back_prop
         actor_input = actions_one_hot
-        actor_input = self.actor_layers[-1].backward_prop_softmax(actor_input, ppo_weight, actor_learning_rate, entropy_beta)
+        opt = optimizer if optimizer is not None else self.optimizer
+        actor_input = self.actor_layers[-1].backward_prop_softmax(actor_input, ppo_weight, actor_learning_rate, entropy_beta, optimizer=opt)
         for layer in reversed(self.actor_layers[:-1]):
-            actor_input = layer.backward_prop(actor_input, actor_learning_rate)
+            actor_input = layer.backward_prop(actor_input, actor_learning_rate, optimizer=opt)
         actor_dx = actor_input
         
         # value back_prop
         critic_input = target
-        critic_input = self.critic_layers[-1].backward_prop_value(critic_input, critic_learning_rate, value_loss_coef)
+        critic_input = self.critic_layers[-1].backward_prop_value(critic_input, critic_learning_rate, value_loss_coef, optimizer=opt)
         for layer in reversed(self.critic_layers[:-1]):
-            critic_input = layer.backward_prop(critic_input, critic_learning_rate)
+            critic_input = layer.backward_prop(critic_input, critic_learning_rate, optimizer=opt)
         critic_dx = critic_input
         
         # feature back_prop
@@ -74,7 +77,11 @@ class NN():
         # print(f"feature input std (entering feature layers): {np.std(feature_input):.6f}")  # should be ~1.0
         # print(f"gradient entering feature layers std: {np.std(feature_input):.6f}")
         for layer in reversed(self.feature_layers):
-            feature_input = layer.backward_prop(feature_input, actor_learning_rate)
+            # feature layers may not have optimizer-specific updates, but accept optimizer param
+            try:
+                feature_input = layer.backward_prop(feature_input, actor_learning_rate, optimizer=opt)
+            except TypeError:
+                feature_input = layer.backward_prop(feature_input, actor_learning_rate)
             # print(f"  after {type(layer).__name__}: std={np.std(feature_input):.6f}")
         
         # print(f"actor_dx std: {np.std(actor_dx):.6f}")
