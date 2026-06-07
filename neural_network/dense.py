@@ -32,6 +32,11 @@ class Dense():
             input = input[None, :]
         input = np.asarray(input)
         self.input = input
+        if self.input.shape[1] != self.weights.shape[1]:
+            raise ValueError(
+                f"Dense.forward_prop input width {self.input.shape[1]} does not match "
+                f"weights width {self.weights.shape[1]}"
+            )
         self.pre_activated = self.input @ self.weights.T + self.biases
         self.output = self.ReLu(self.pre_activated)
         return self.output
@@ -41,6 +46,11 @@ class Dense():
             input = input[None, :]
         input = np.asarray(input)
         self.input = input
+        if self.input.shape[1] != self.weights.shape[1]:
+            raise ValueError(
+                f"Dense.forward_prop_softmax input width {self.input.shape[1]} does not match "
+                f"weights width {self.weights.shape[1]}"
+            )
         self.pre_activated_output = self.input @ self.weights.T + self.biases
         self.output = self.softmax(self.pre_activated_output)
         return self.output
@@ -50,6 +60,11 @@ class Dense():
             input = input[None, :]
         input = np.asarray(input)
         self.input = input
+        if self.input.shape[1] != self.weights.shape[1]:
+            raise ValueError(
+                f"Dense.forward_prop_value input width {self.input.shape[1]} does not match "
+                f"weights width {self.weights.shape[1]}"
+            )
         self.pre_activated_output = self.input @ self.weights.T + self.biases
         self.output = self.pre_activated_output
         return self.output
@@ -225,5 +240,13 @@ class Dense():
     
     def load(self, filename):
         data = np.load(filename, allow_pickle=True)
-        self.weights = data["weights"]
-        self.biases = data["biases"]
+        self.weights = np.asarray(data["weights"])
+        self.biases = np.asarray(data["biases"])
+        if self.weights.ndim != 2 or self.biases.ndim != 1:
+            raise ValueError(
+                f"Invalid Dense load shapes: weights={self.weights.shape}, biases={self.biases.shape}"
+            )
+        if self.weights.shape[0] != self.biases.shape[0]:
+            raise ValueError(
+                f"Dense load mismatch: weights rows {self.weights.shape[0]} != biases length {self.biases.shape[0]}"
+            )

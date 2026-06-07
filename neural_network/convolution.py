@@ -424,3 +424,13 @@ class Convolution:
         self.kernels_shape = tuple(
             map(int, data["kernels_shape"])
         )
+
+        if self.kernels.shape != self.kernels_shape:
+            raise ValueError(
+                f"Loaded convolution kernels shape {self.kernels.shape} does not match expected {self.kernels_shape}"
+            )
+
+        if self.biases.shape != (self.depth, 1, 1):
+            raise ValueError(
+                f"Loaded convolution biases shape {self.biases.shape} does not match expected {(self.depth, 1, 1)}"
+            )

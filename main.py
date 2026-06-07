@@ -13,7 +13,7 @@ if __name__ == "__main__":
     conv2_out = pool_out - KERNEL_SIZE + 1
 
     flat_size = (CONV_DEPTH * 2) * conv2_out * conv2_out
-    dense_input = flat_size + 12
+    dense_input = flat_size + 8
 
     feature_layers = []
     actor_layers = []
@@ -39,12 +39,12 @@ if __name__ == "__main__":
     critic_layers.append(nn.create_dense_layer(1, 32)) # 32x1 = parameters
     nn.critic_layers = critic_layers
 
-    nn.load()
+    # nn.load()
     t = Train(nn, board_size=BOARD_SIZE)
     epoch_max = 0
     entropy_min = 2
     while True:
-        epoch_avg, entropy_avg = t.train(epochs=10, episodes=64, verbose=False, epsilon=0.2)
+        epoch_avg, entropy_avg = t.train(verbose=False)
         
         if(epoch_avg > epoch_max):
             epoch_max = epoch_avg

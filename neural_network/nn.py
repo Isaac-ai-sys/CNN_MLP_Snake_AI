@@ -22,12 +22,12 @@ class NN():
         # optimizer setting: 'sgd' or 'adam'
         self.optimizer = 'adam'
     
-    def forward_prop(self, state, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running):
+    def forward_prop(self, state, direction, length, dx_food, dy_food, running):
         # feature forward prop
         feature_input = state
         for layer in self.feature_layers:
             if isinstance(layer, Reshape):
-                feature_input = layer.forward_prop(feature_input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running)
+                feature_input = layer.forward_prop(feature_input, direction, length, dx_food, dy_food, running)
             else:
                 feature_input = layer.forward_prop(feature_input)
         features = feature_input
@@ -46,17 +46,17 @@ class NN():
         
         return actor_probs, critic_value
     
-    def backward_prop(self, actions_one_hot, ppo_weight, target, actor_learning_rate=0.0001, critic_learning_rate=0.0001, entropy_beta=0.02, value_loss_coef=0.5, optimizer=None):
+    def backward_prop(self, actions_one_hot, advantages, returns, actor_learning_rate=0.0001, critic_learning_rate=0.0001, entropy_beta=0.02, value_loss_coef=0.5, optimizer=None):
         # actor back_prop
         actor_input = actions_one_hot
         opt = optimizer if optimizer is not None else self.optimizer
-        actor_input = self.actor_layers[-1].backward_prop_softmax(actor_input, ppo_weight, actor_learning_rate, entropy_beta, optimizer=opt)
+        actor_input = self.actor_layers[-1].backward_prop_softmax(actor_input, advantages, actor_learning_rate, entropy_beta, optimizer=opt)
         for layer in reversed(self.actor_layers[:-1]):
             actor_input = layer.backward_prop(actor_input, actor_learning_rate, optimizer=opt)
         actor_dx = actor_input
         
         # value back_prop
-        critic_input = target
+        critic_input = returns
         critic_input = self.critic_layers[-1].backward_prop_value(critic_input, critic_learning_rate, value_loss_coef, optimizer=opt)
         for layer in reversed(self.critic_layers[:-1]):
             critic_input = layer.backward_prop(critic_input, critic_learning_rate, optimizer=opt)
@@ -109,13 +109,42 @@ class NN():
         for i in range(len(self.feature_layers)):
             self.feature_layers[i].save(f"{self.save_dir}/feature/layer{i}")
     
+    def _load_layer(self, layer, filename):
+        from pathlib import Path
+        path = Path(filename)
+        if not path.exists():
+            return
+
+        old_params = {}
+        for attr in ("weights", "biases", "kernels"):
+            if hasattr(layer, attr):
+                old_params[attr] = getattr(layer, attr)
+
+        try:
+            layer.load(str(path))
+
+            for attr, old_value in old_params.items():
+                new_value = getattr(layer, attr, None)
+                if new_value is not None and new_value.shape != old_value.shape:
+                    raise ValueError(
+                        f"Loaded '{path}' has {attr} shape {new_value.shape}, "
+                        f"expected {old_value.shape}"
+                    )
+        except Exception as exc:
+            print(
+                f"Warning: could not load '{path}': {exc}. "
+                "Using randomly initialized layer instead."
+            )
+            for attr, old_value in old_params.items():
+                setattr(layer, attr, old_value)
+
     def load(self):
         for i in range(len(self.actor_layers)):
-            self.actor_layers[i].load(f"{self.save_dir}/actor/layer{i}.npz")
+            self._load_layer(self.actor_layers[i], f"{self.save_dir}/actor/layer{i}.npz")
         for i in range(len(self.critic_layers)):
-            self.critic_layers[i].load(f"{self.save_dir}/critic/layer{i}.npz")
+            self._load_layer(self.critic_layers[i], f"{self.save_dir}/critic/layer{i}.npz")
         for i in range(len(self.feature_layers)):
-            self.feature_layers[i].load(f"{self.save_dir}/feature/layer{i}.npz")
+            self._load_layer(self.feature_layers[i], f"{self.save_dir}/feature/layer{i}.npz")
     
     def choose_actions_batch(self, input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running, epsilon=0.0):
         input = np.asarray(input)

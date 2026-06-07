@@ -15,10 +15,6 @@ class Reshape():
         input,
         direction,
         length,
-        danger_up,
-        danger_right,
-        danger_down,
-        danger_left,
         dx_food,
         dy_food,
         running
@@ -36,10 +32,6 @@ class Reshape():
         extras_list = []
         for value in (
             length,
-            danger_up,
-            danger_right,
-            danger_down,
-            danger_left,
             dx_food,
             dy_food,
             running
