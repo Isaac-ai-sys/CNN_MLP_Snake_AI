@@ -396,9 +396,9 @@ class Train:
                     
                     entropy = -np.sum(probs * np.log(probs + 1e-8), axis=1).mean()
                     if entropy < 0.5:  # log(4) ≈ 1.386 is max for 4 actions
-                        entropy_coef = min(entropy_coef * 1.1, 0.3)  # slightly increase
+                        entropy_coef = min(entropy_coef * 1.05, 0.2)  # slightly increase
                     elif entropy > 1:
-                        entropy_coef = max(entropy_coef * 0.9, 0.05) # slightly decrease
+                        entropy_coef = max(entropy_coef * 0.95, 0.05) # slightly decrease
 
                     selected_probs = probs[
                         np.arange(len(a)),
