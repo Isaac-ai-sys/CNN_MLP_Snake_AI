@@ -53,6 +53,9 @@ class Dense():
             )
         self.pre_activated_output = self.input @ self.weights.T + self.biases
         self.output = self.softmax(self.pre_activated_output)
+        self.output = np.clip(self.output, 1e-6, 1.0 - 1e-6)
+        # renormalize
+        self.output /= self.output.sum(axis=1, keepdims=True)
         return self.output
     
     def forward_prop_value(self, input):
@@ -135,10 +138,8 @@ class Dense():
         dz[batch_idx, action_idx] -= ppo_weight
 
         if entropy_beta != 0.0:
-            # gradient of entropy H = -sum p log p w.r.t. logits z is: dH/dz_j = p_j * (H - log p_j)
-            # for loss = actor_loss - entropy_coef * H, add: -entropy_coef * dH/dz = entropy_coef * p * (log p - H)
-            entropy = -np.sum(self.output * np.log(self.output + 1e-8), axis=1)
-            dz += entropy_beta * self.output * (np.log(self.output + 1e-8) + entropy[:, None])
+            uniform = np.ones_like(self.output) / self.output.shape[1]
+            dz += entropy_beta * (self.output - uniform)
 
         dw = (dz.T @ self.input) / batch_size
         db = np.mean(dz, axis=0)

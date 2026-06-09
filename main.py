@@ -39,22 +39,16 @@ if __name__ == "__main__":
     critic_layers.append(nn.create_dense_layer(1, 32)) # 32x1 = parameters
     nn.critic_layers = critic_layers
 
-    # nn.load()
+    nn.load()
     t = Train(nn, board_size=BOARD_SIZE)
     epoch_max = 0
-    entropy_min = 2
     while True:
-        epoch_avg, entropy_avg = t.train(verbose=False)
+        epoch_avg, entropy = t.train(verbose=False)
         
-        if(epoch_avg > epoch_max):
+        if(epoch_avg > epoch_max and entropy > 0.5):
             epoch_max = epoch_avg
             print(f"epoch_avg: {epoch_avg:.3f} ****** New Max ******")
+            print(f"entropy: {entropy:.3f}")
             nn.save()
         else:
             print(f"epoch_avg: {epoch_avg:.3f}")
-        
-        if(entropy_avg < entropy_min):
-            entropy_min = entropy_avg
-            print(f"entropy_avg: {entropy_avg:.3f} ****** New Min ******")
-        else:
-            print(f"entropy_avg: {entropy_avg:.3f}")

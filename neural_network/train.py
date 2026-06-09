@@ -256,7 +256,7 @@ class Train:
         ppo_clip=0.2,
         gradient_epochs=4,
         batch_size=4096,
-        entropy_coef=0.01,
+        entropy_coef=0.05,
         value_loss_coef=0.5,
         epsilon=0.1,
         epsilon_decay=0.995,
@@ -393,6 +393,12 @@ class Train:
                             r
                         )
                     )
+                    
+                    entropy = -np.sum(probs * np.log(probs + 1e-8), axis=1).mean()
+                    if entropy < 0.5:  # log(4) ≈ 1.386 is max for 4 actions
+                        entropy_coef = min(entropy_coef * 1.1, 0.3)  # slightly increase
+                    elif entropy > 1:
+                        entropy_coef = max(entropy_coef * 0.9, 0.05) # slightly decrease
 
                     selected_probs = probs[
                         np.arange(len(a)),
@@ -464,11 +470,14 @@ class Train:
 
             alive = env.running.mean()
 
+            entropy = float(-np.sum(probs * np.log(probs + 1e-8), axis=1).mean())
             print(
                 f"Epoch {epoch} | "
                 f"Reward: {avg_reward:.3f} | "
                 f"Length: {avg_length:.3f} | "
+                f"Entropy: {entropy:.3f} | "
                 f"Alive: {alive:.3f} | "
                 f"Rollout: {rollout_end - rollout_start:.3f}s | "
                 f"Train: {train_end - train_start:.3f}s"
             )
+        return avg_length, entropy
