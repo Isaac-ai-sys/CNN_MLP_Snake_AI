@@ -264,15 +264,15 @@ class Train:
         critic_learning_rate=0.0005,
         gamma=0.99,
         lam=0.95,
-        ppo_clip=0.2,
+        ppo_clip=0.05,
         gradient_epochs=4,
-        batch_size=4096,
-        entropy_coef=0.085,
+        batch_size=8192,
+        entropy_coef=0.1,
         value_loss_coef=0.5,
-        epsilon=0.05,
+        epsilon=0.1,
         epsilon_decay=0.995,
         epsilon_min=0.01,
-        target_kl=0.1,
+        target_kl=0.075,
         verbose=False
     ):
 
@@ -359,6 +359,9 @@ class Train:
             old_log_probs = old_log_probs.reshape(B)
 
             train_start = time.perf_counter()
+            
+            entropy_sum = 0.0
+            entropy_count = 0
 
             for g in range(gradient_epochs):
 
@@ -406,12 +409,8 @@ class Train:
                     )
                     
                     entropy = -np.sum(probs * np.log(probs + 1e-8), axis=1).mean()
-                    # TARGET_ENTROPY = 0.75  # roughly half of ln(4)
-                    # if entropy < TARGET_ENTROPY:
-                    #     entropy_coef = min(entropy_coef * 1.001, 0.15)
-                    # elif entropy > 1.1:
-                    #     entropy_coef = max(entropy_coef * 0.999, 0.075)
-                    # # else: leave it alone — entropy is in the healthy zone
+                    entropy_sum += float(entropy.mean()) * len(a)
+                    entropy_count += len(a)
 
                     selected_probs = probs[
                         np.arange(len(a)),
@@ -482,7 +481,13 @@ class Train:
 
             avg_length = env.lengths.mean()
 
-            entropy = float(-np.sum(probs * np.log(probs + 1e-8), axis=1).mean())
+            entropy = entropy_sum / entropy_count
+            TARGET_ENTROPY = 0.8  # roughly half of ln(4)
+            if entropy < TARGET_ENTROPY:
+                entropy_coef = min(entropy_coef * 1.005, 0.2)
+            elif entropy > 1.1:
+                entropy_coef = max(entropy_coef * 0.995, 0.1)
+            # else: leave it alone — entropy is in the healthy zone
             print(
                 f"Epoch {epoch} | "
                 f"Returns: {avg_returns:.3f} | "

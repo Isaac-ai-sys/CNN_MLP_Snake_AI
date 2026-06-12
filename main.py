@@ -39,7 +39,7 @@ if __name__ == "__main__":
     critic_layers.append(nn.create_dense_layer(1, 32)) # 32x1 = parameters
     nn.critic_layers = critic_layers
 
-    # nn.load()
+    nn.load()
     t = Train(nn, board_size=BOARD_SIZE, num_envs=256)
     epoch_max = 0
     while True:
@@ -49,6 +49,6 @@ if __name__ == "__main__":
             epoch_max = epoch_avg
             print(f"epoch_avg: {epoch_avg:.3f} ****** New Max ******")
             print(f"entropy: {entropy:.3f}")
-            nn.save()
+            # nn.save()
         else:
             print(f"epoch_avg: {epoch_avg:.3f}")
