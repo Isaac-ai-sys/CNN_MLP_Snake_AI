@@ -4,6 +4,7 @@ except Exception:
     import numpy as np
 
 import time
+import os
 
 from game.snake_env import VectorizedSnakeEnv
 
@@ -15,12 +16,23 @@ class Train:
         neural_net,
         board_size=20,
         num_envs=64,
-        rollout_steps=256
+        rollout_steps=1024
     ):
         self.nn = neural_net
         self.board_size = board_size
         self.num_envs = num_envs
         self.rollout_steps = rollout_steps
+        
+        POSITION_LIBRARY_PATH = "game/snake_positions.npz"
+        
+        env = VectorizedSnakeEnv()
+
+        if not os.path.exists(POSITION_LIBRARY_PATH):
+            print("Generating position library...")
+            self.position_library = env.pregenerate_random_snake_envs(pregenerated_envs=100000)
+            env.save_environments(POSITION_LIBRARY_PATH, **self.position_library)
+        else:
+            self.position_library = env.load_environments(POSITION_LIBRARY_PATH)
 
     def compute_gae(
         self,
@@ -73,6 +85,10 @@ class Train:
         env,
         epsilon=0.0
     ):
+        if self.position_library is not None:
+            n_seeded = 3 * self.num_envs // 4
+            seeded_idx = np.random.choice(self.num_envs, n_seeded, replace=False)
+            env.seed_from_library(seeded_idx, self.position_library)
 
         T = self.rollout_steps
         N = self.num_envs
@@ -173,14 +189,9 @@ class Train:
                 size=N
             )
 
-            sampled_actions = np.array([
-                np.random.choice(
-                    4,
-                    size=1,
-                    p=probs[i]
-                )[0]
-                for i in range(N)
-            ])
+            cumprobs = probs.cumsum(axis=1)
+            u = np.random.rand(N, 1).astype(probs.dtype)
+            sampled_actions = (cumprobs < u).sum(axis=1).clip(0, 3)
 
             action = np.where(
                 random_mask,
@@ -250,18 +261,18 @@ class Train:
         self,
         epochs=100,
         actor_learning_rate=0.0001,
-        critic_learning_rate=0.0001,
+        critic_learning_rate=0.0005,
         gamma=0.99,
         lam=0.95,
         ppo_clip=0.2,
         gradient_epochs=4,
         batch_size=4096,
-        entropy_coef=0.05,
+        entropy_coef=0.085,
         value_loss_coef=0.5,
-        epsilon=0.1,
+        epsilon=0.05,
         epsilon_decay=0.995,
         epsilon_min=0.01,
-        target_kl=0.03,
+        target_kl=0.1,
         verbose=False
     ):
 
@@ -395,10 +406,12 @@ class Train:
                     )
                     
                     entropy = -np.sum(probs * np.log(probs + 1e-8), axis=1).mean()
-                    if entropy < 0.5:  # log(4) ≈ 1.386 is max for 4 actions
-                        entropy_coef = min(entropy_coef * 1.05, 0.2)  # slightly increase
-                    elif entropy > 1:
-                        entropy_coef = max(entropy_coef * 0.95, 0.05) # slightly decrease
+                    # TARGET_ENTROPY = 0.75  # roughly half of ln(4)
+                    # if entropy < TARGET_ENTROPY:
+                    #     entropy_coef = min(entropy_coef * 1.001, 0.15)
+                    # elif entropy > 1.1:
+                    #     entropy_coef = max(entropy_coef * 0.999, 0.075)
+                    # # else: leave it alone — entropy is in the healthy zone
 
                     selected_probs = probs[
                         np.arange(len(a)),
@@ -437,8 +450,7 @@ class Train:
                         old_lp - new_log_probs
                     )
 
-                    if approx_kl > target_kl:
-
+                    if approx_kl > target_kl and g > 0:
                         if verbose:
                             print(
                                 f"Early stopping "
@@ -464,19 +476,19 @@ class Train:
                 epsilon * epsilon_decay
             )
 
-            avg_reward = rewards.mean()
+            avg_returns = returns.mean()
+
+            avg_advantages = advantages.mean()
 
             avg_length = env.lengths.mean()
-
-            alive = env.running.mean()
 
             entropy = float(-np.sum(probs * np.log(probs + 1e-8), axis=1).mean())
             print(
                 f"Epoch {epoch} | "
-                f"Reward: {avg_reward:.3f} | "
+                f"Returns: {avg_returns:.3f} | "
+                f"Advantages: {avg_advantages:.3f} | "
                 f"Length: {avg_length:.3f} | "
                 f"Entropy: {entropy:.3f} | "
-                f"Alive: {alive:.3f} | "
                 f"Rollout: {rollout_end - rollout_start:.3f}s | "
                 f"Train: {train_end - train_start:.3f}s"
             )

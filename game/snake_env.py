@@ -100,7 +100,7 @@ class VectorizedSnakeEnv:
 
         alive = self.running.copy()
 
-        rewards[alive] += 0.004
+        rewards[alive] -= 0.001 # small step penalty
 
         old_heads = self.heads.copy()
 
@@ -190,7 +190,7 @@ class VectorizedSnakeEnv:
             still_alive
         )
 
-        rewards[ate_food] += 2.0
+        rewards[ate_food] += 2.0 + np.log1p(self.lengths[ate_food]) * 0.5
 
         # decrement snake ages
         # snakes that eat keep their tail
@@ -219,7 +219,7 @@ class VectorizedSnakeEnv:
             self.spawn_food(np.where(ate_food)[0])
 
         # death
-        rewards[done] -= 2.0
+        rewards[done] -= 2.001
 
         self.running[done] = False
 
@@ -284,3 +284,102 @@ class VectorizedSnakeEnv:
             dy_food.astype(np.float32),
             running
         )
+    
+    def seed_from_library(self, env_indices, position_library):
+        count = position_library["count"]
+        chosen = np.random.randint(0, count, size=len(env_indices))
+        
+        chosen_cpu = chosen.get() if hasattr(chosen, "get") else chosen
+        env_indices_cpu = env_indices.get() if hasattr(env_indices, "get") else env_indices
+        
+        self.snake_boards[env_indices_cpu] = np.asarray(position_library["snake_boards"][chosen_cpu])
+        self.heads[env_indices_cpu] = np.asarray(position_library["heads"][chosen_cpu])
+        self.lengths[env_indices_cpu] = np.asarray(position_library["lengths"][chosen_cpu])
+        self.curr_directions[env_indices_cpu] = np.asarray(position_library["directions"][chosen_cpu])
+        self.running[env_indices_cpu] = True
+        self.food_boards[env_indices_cpu] = 0
+        self.spawn_food(env_indices_cpu)
+    
+    def pregenerate_random_snake_envs(self, pregenerated_envs=10000, min_length=10, max_length=375):
+        snake_boards = np.zeros((pregenerated_envs, self.size, self.size), dtype=np.int16)
+        heads = np.zeros((pregenerated_envs, 2), dtype=np.int32)
+        lengths = np.zeros(pregenerated_envs, dtype=np.int32)
+        directions = np.zeros(pregenerated_envs, dtype=np.int8)
+        
+        i = 0
+        attempts = 0
+        max_attempts = pregenerated_envs * 15
+        
+        while attempts < max_attempts and i < pregenerated_envs:
+            attempts += 1
+            target_length = np.random.randint(min_length, max_length)
+            
+            board = np.zeros((self.size, self.size), dtype=np.int16)
+            x, y = np.random.randint(0, self.size), np.random.randint(0, self.size)
+            body = [(x, y)]
+            board[x, y] = 1
+            last_dir = np.random.randint(4)
+            
+            for _ in range(target_length - 1):
+                preferred = [last_dir] * 30 + [d for d in range(4) if d != self.OPPOSITE[last_dir]]
+                np.random.shuffle(preferred)
+                
+                moved = False
+                for d in preferred:
+                    dx, dy = self.DIRS[d]
+                    nx, ny = body[-1][0] + dx, body[-1][1] + dy
+                    if 0 <= nx < self.size and 0 <= ny < self.size and board[nx, ny] == 0:
+                        moved = True
+                        body.append((nx, ny))
+                        board[nx, ny] = 1
+                        last_dir = d
+                        break
+                
+                if not moved:
+                    break
+                
+            if len(body) < min_length:
+                continue
+                #bias towards longer positions
+            if len(body) < 100:
+                random_num = np.random.randint(50)
+                if random_num < 49:
+                    continue
+            
+            actual_length = len(body)
+            final_board = np.zeros((self.size, self.size), dtype=np.int16)
+            for age, (bx, by) in enumerate(body):
+                final_board[bx, by] = age + 1
+            
+            snake_boards[i] = final_board
+            heads[i] = body[-1]
+            lengths[i] = actual_length
+            directions[i] = last_dir
+            i += 1
+            
+        actual_count = i
+        print(f"Generated {actual_count} environments in {attempts} attempts")
+        print(f"Average environment length is {np.mean(lengths)}")
+        print(f"Maximum environment length is {np.max(lengths)}")
+        
+        #return dictionary of arrays
+        return {
+            "snake_boards": snake_boards[:actual_count],
+            "heads": heads[:actual_count],
+            "lengths": lengths[:actual_count],
+            "directions": directions[:actual_count],
+            "count": actual_count
+        }
+        
+    def save_environments(self, path="snake_positions.npz", **kwargs):
+        np.savez_compressed(path, **kwargs)
+    
+    def load_environments(self, path="snake_positions.npz"):
+        data = np.load(path)
+        return {
+            "snake_boards": data["snake_boards"],
+            "heads": data["heads"],
+            "lengths": data["lengths"],
+            "directions": data["directions"],
+            "count": int(data["lengths"].shape[0])
+        }

@@ -60,18 +60,18 @@ class NN():
         critic_input = self.critic_layers[-1].backward_prop_value(critic_input, critic_learning_rate, value_loss_coef, optimizer=opt)
         for layer in reversed(self.critic_layers[:-1]):
             critic_input = layer.backward_prop(critic_input, critic_learning_rate, optimizer=opt)
-        critic_dx = critic_input
+        # critic_dx = critic_input
         
         # feature back_prop
         # combine actor and critic gradients for shared feature layers
         # avoid amplifying tiny stddevs (which can destabilize training)
         actor_std = np.std(actor_dx)
-        critic_std = np.std(critic_dx)
+        # critic_std = np.std(critic_dx)
         min_std = 1e-2
         actor_dx /= max(actor_std, min_std)
-        critic_dx /= max(critic_std, min_std)
+        # critic_dx /= max(critic_std, min_std)
         # nn.py — current
-        feature_input = actor_dx + 0.5 * critic_dx
+        feature_input = actor_dx # + 0.5 * critic_dx could add this back in
         # feature_input = np.clip(feature_input, -1, 1)
         feature_input /= max(np.std(feature_input), min_std)
         # print(f"feature input std (entering feature layers): {np.std(feature_input):.6f}")  # should be ~1.0
