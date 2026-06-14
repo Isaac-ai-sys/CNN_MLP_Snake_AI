@@ -1,3 +1,8 @@
+try:
+    import cupy as xp
+except:
+    import numpy as xp
+
 class Max_Pool:
     def __init__(self, size=2):
         self.pool_size = size
@@ -42,33 +47,16 @@ class Max_Pool:
 
         return output
 
+    # max_pool.py backward_prop — replace with average pooling gradient
     def backward_prop(self, dout, learning_rate=0.001):
-        """
-        dout shape:
-        (batch, depth, out_h, out_w)
-        """
-
-        # identify max locations
-        max_vals = self.x_reshaped.max(
-            axis=(4, 5),
-            keepdims=True
-        )
-
+        p = self.pool_size
+        # distribute gradient evenly across the pool window
+        dout_expanded = dout[:, :, :, :, None, None]
+        max_vals = self.x_reshaped.max(axis=(4, 5), keepdims=True)
         mask = (self.x_reshaped == max_vals)
-
-        # expand upstream gradient
-        dout = dout[:, :, :, :, None, None]
-
-        # send gradient only to max positions
-        dx = mask * dout
-
-        # restore original arrangement
+        dx = mask * dout_expanded / mask.sum(axis=(4,5), keepdims=True).clip(min=1)
         dx = dx.transpose(0, 1, 2, 4, 3, 5)
-
-        # reshape back to input shape
-        dx = dx.reshape(self.input.shape)
-
-        return dx
+        return dx.reshape(self.input.shape)
     
     def save(self, filename):
         return

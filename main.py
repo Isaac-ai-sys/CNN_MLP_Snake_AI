@@ -13,7 +13,7 @@ if __name__ == "__main__":
     conv2_out = pool_out - KERNEL_SIZE + 1
 
     flat_size = (CONV_DEPTH * 2) * conv2_out * conv2_out
-    dense_input = flat_size + 11
+    dense_input = flat_size + 8
 
     feature_layers = []
     actor_layers = []
@@ -23,37 +23,34 @@ if __name__ == "__main__":
     # create feature network
     feature_layers.append(nn.create_convolution_layer((3, BOARD_SIZE, BOARD_SIZE), KERNEL_SIZE, CONV_DEPTH)) # output is 18x18x8
     feature_layers.append(nn.create_max_pool_layer(2)) # output is 9x9x8
-    feature_layers.append(nn.create_convolution_layer((CONV_DEPTH, conv1_out, conv1_out), KERNEL_SIZE, CONV_DEPTH * 2)) # output is 7x7x16
+    feature_layers.append(nn.create_convolution_layer((CONV_DEPTH, pool_out, pool_out), KERNEL_SIZE, CONV_DEPTH * 2)) # output is 7x7x16
     feature_layers.append(nn.create_reshape_layer((CONV_DEPTH * 2, conv2_out, conv2_out), (flat_size, 1)))
-    feature_layers.append(nn.create_dense_layer(128, dense_input)) # (7x7x16 + 11) x 128 = 101,760 parameters
+    feature_layers.append(nn.create_dense_layer(64, dense_input)) # (7x7x16 + 12) x 64 = 50,944 parameters
     nn.feature_layers = feature_layers
     
     #create actor network
-    actor_layers.append(nn.create_dense_layer(32, 128)) # 128x32 = 4096 parameters
-    actor_layers.append(nn.create_dense_layer(4, 32)) # 32x4 = 128 parameters
+    actor_layers.append(nn.create_dense_layer(32, 64)) # 64x32 = 2048 parameters
+    actor_layers.append(nn.create_dense_layer(16, 32)) #  16x32 = 512 parameters
+    actor_layers.append(nn.create_dense_layer(4, 16)) # 16x4 = 64 parameters
     nn.actor_layers = actor_layers
     
     #create critic network
-    critic_layers.append(nn.create_dense_layer(32, 128)) # 128x32 = 4096 parameters
+    critic_layers.append(nn.create_dense_layer(32, 64)) # 64x32 = 2048 parameters
     critic_layers.append(nn.create_dense_layer(1, 32)) # 32x1 = parameters
     nn.critic_layers = critic_layers
 
     nn.load()
-    t = Train(nn, board_size=BOARD_SIZE)
-    epoch_max = 0
-    entropy_min = 2
+    t = Train(nn, board_size=BOARD_SIZE, num_envs=64)
+    max_avg = 0
+    entropy = 1.0
     while True:
-        epoch_avg = t.train(epochs=5, episodes=64)
-        
-        if(epoch_avg > epoch_max):
-            epoch_max = epoch_avg
-            print(f"epoch_avg: {epoch_avg:.3f} ****** New Max ******")
+        avg_length, max_length = t.test()
+        if(avg_length > max_avg and entropy > 0.5):
+            max_avg = avg_length
+            print(f"epoch_avg: {avg_length:.3f} ****** New Max ******")
+            # print(f"entropy: {entropy:.3f}")
             nn.save()
         else:
-            print(f"epoch_avg: {epoch_avg:.3f}")
+            print(f"epoch_avg: {avg_length:.3f}")
+        returns_avg, entropy = t.train(verbose=False)
         
-        # if(entropy_avg < entropy_min):
-        #     entropy_min = entropy_avg
-        #     print(f"entropy_avg: {entropy_avg:.3f} ****** New Min ******")
-        # else:
-        #     print(f"entropy_avg: {entropy_avg:.3f}")
