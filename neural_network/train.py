@@ -3,6 +3,9 @@ try:
 except Exception:
     import numpy as np
 
+import numpy as onp
+from collections import deque
+
 import time
 import os
 
@@ -22,17 +25,8 @@ class Train:
         self.board_size = board_size
         self.num_envs = num_envs
         self.rollout_steps = rollout_steps
-        
-        POSITION_LIBRARY_PATH = "game/snake_positions.npz"
-        
-        env = VectorizedSnakeEnv()
 
-        if not os.path.exists(POSITION_LIBRARY_PATH):
-            print("Generating position library...")
-            self.position_library = env.pregenerate_random_snake_envs(pregenerated_envs=100000)
-            env.save_environments(POSITION_LIBRARY_PATH, **self.position_library)
-        else:
-            self.position_library = env.load_environments(POSITION_LIBRARY_PATH)
+        self.position_library = None
 
     def compute_gae(
         self,
@@ -79,6 +73,32 @@ class Train:
         returns = advantages + values
 
         return advantages, returns
+    
+    def clear_position_library(self):
+        lib = self.position_library
+        count = lib["count"]
+        lib["snake_boards"] = lib["snake_boards"][count:]
+        lib["heads"] = lib["heads"][count:]
+        lib["lengths"] = lib["lengths"][count:]
+        lib["directions"] = lib["directions"][count:]
+        lib["count"] = 0
+    
+    def add_to_position_library(self, snapshot):
+        if snapshot["count"] == 0:
+            return
+
+        lib = self.position_library
+
+        def cat(a, b):
+            a = a.get() if hasattr(a, "get") else onp.asarray(a)
+            b = b.get() if hasattr(b, "get") else onp.asarray(b)
+            return onp.concatenate([a, b], axis=0)
+
+        lib["snake_boards"] = cat(lib["snake_boards"], snapshot["snake_boards"])
+        lib["heads"]        = cat(lib["heads"],        snapshot["heads"])
+        lib["lengths"]      = cat(lib["lengths"],      snapshot["lengths"])
+        lib["directions"]   = cat(lib["directions"],   snapshot["directions"])
+        lib["count"] = lib["snake_boards"].shape[0]
 
     def collect_rollout(
         self,
@@ -86,7 +106,7 @@ class Train:
         epsilon=0.0
     ):
         if self.position_library is not None:
-            n_seeded = 3 * self.num_envs // 4
+            n_seeded = self.num_envs
             seeded_idx = np.random.choice(self.num_envs, n_seeded, replace=False)
             env.seed_from_library(seeded_idx, self.position_library)
 
@@ -223,6 +243,8 @@ class Train:
                 dead_envs = dead_envs.get()
             if dead_envs.size > 0:
                 env.reset(dead_envs)
+                if self.position_library is not None:
+                    env.seed_from_library(dead_envs, self.position_library)
 
             states[t] = board
             directions[t] = direction
@@ -264,15 +286,15 @@ class Train:
         critic_learning_rate=0.0005,
         gamma=0.99,
         lam=0.95,
-        ppo_clip=0.05,
+        ppo_clip=0.2,
         gradient_epochs=4,
         batch_size=8192,
-        entropy_coef=0.1,
+        entropy_coef=0.02,
         value_loss_coef=0.5,
-        epsilon=0.1,
-        epsilon_decay=0.995,
-        epsilon_min=0.01,
-        target_kl=0.075,
+        epsilon=0.0,
+        epsilon_decay=0.99,
+        epsilon_min=0.000,
+        target_kl=0.05,
         verbose=False
     ):
 
@@ -482,11 +504,11 @@ class Train:
             avg_length = env.lengths.mean()
 
             entropy = entropy_sum / entropy_count
-            TARGET_ENTROPY = 0.8  # roughly half of ln(4)
+            TARGET_ENTROPY = 0.4
             if entropy < TARGET_ENTROPY:
                 entropy_coef = min(entropy_coef * 1.005, 0.2)
             elif entropy > 1.1:
-                entropy_coef = max(entropy_coef * 0.995, 0.1)
+                entropy_coef = max(entropy_coef * 0.995, 0.02)
             # else: leave it alone — entropy is in the healthy zone
             print(
                 f"Epoch {epoch} | "
@@ -497,4 +519,96 @@ class Train:
                 f"Rollout: {rollout_end - rollout_start:.3f}s | "
                 f"Train: {train_end - train_start:.3f}s"
             )
-        return avg_length, entropy
+        return avg_returns, entropy
+    
+    def test(self):
+        # clear self-play library so it only contains fresh test-run positions
+        self.position_library = {
+            "snake_boards": onp.zeros((0, self.board_size, self.board_size), dtype=onp.int16),
+            "heads": onp.zeros((0, 2), dtype=onp.int32),
+            "lengths": onp.zeros((0,), dtype=onp.int32),
+            "directions": onp.zeros((0,), dtype=onp.int8),
+            "count": 0
+        }
+        
+        env = VectorizedSnakeEnv(
+            num_envs=self.num_envs,
+            size=self.board_size
+        )
+        
+        head_history = [(deque(maxlen=self.board_size * 2), set()) for _ in range(self.num_envs)]
+        prev_lengths = onp.array(env.lengths.copy())
+
+        max_steps = 10000
+        step = 0
+
+        while onp.any(env.running) and step < max_steps:
+            step += 1
+            # snapshot currently-alive envs before stepping
+            alive_idx = onp.where(env.running)[0]
+            if alive_idx.size > 0:
+                snapshot = env.snapshot_envs(alive_idx)
+                self.add_to_position_library(snapshot)
+
+            (
+                board,
+                direction,
+                length,
+                dx_food,
+                dy_food,
+                running
+            ) = env.get_state()
+            
+            #check for loops
+            curr_lengths = onp.array(env.lengths)
+            for idx in onp.where(env.running)[0]:
+                pos = tuple(env.heads[idx])
+                dq, seen = head_history[idx]
+                
+                # if snake ate, reset history — revisiting positions is now valid
+                if curr_lengths[idx] > prev_lengths[idx]:
+                    dq.clear()
+                    seen.clear()
+                
+                if pos in seen:
+                    env.running[idx] = False
+                else:
+                    if len(dq) == dq.maxlen:
+                        seen.discard(dq[0])
+                    dq.append(pos)
+                    seen.add(pos)
+
+            prev_lengths = curr_lengths
+
+            board = np.asarray(board)
+            direction = np.asarray(direction)
+            length = np.asarray(length)
+            dx_food = np.asarray(dx_food)
+            dy_food = np.asarray(dy_food)
+            running = np.asarray(running)
+
+            probs, _ = self.nn.forward_prop(
+                board,
+                direction,
+                length,
+                dx_food,
+                dy_food,
+                running
+            )
+
+            # argmax on GPU, then bring to CPU for env.step
+            actions = np.argmax(probs, axis=1)
+            if hasattr(actions, "get"):
+                actions = actions.get()
+
+            env.step(actions)
+
+        avg_length = float(onp.mean(env.lengths))
+        max_length = int(onp.max(env.lengths))
+
+        print(f"*** Test ***")
+        print(f"  Positions collected: {self.position_library['count']}")
+        print(f"  Average Snake Length: {avg_length:.2f}")
+        print(f"  Maximum Snake Length: {max_length}")
+
+        return avg_length, max_length

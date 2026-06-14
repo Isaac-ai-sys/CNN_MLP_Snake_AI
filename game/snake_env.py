@@ -190,7 +190,7 @@ class VectorizedSnakeEnv:
             still_alive
         )
 
-        rewards[ate_food] += 2.0 + np.log1p(self.lengths[ate_food]) * 0.5
+        rewards[ate_food] += 2.0
 
         # decrement snake ages
         # snakes that eat keep their tail
@@ -285,20 +285,35 @@ class VectorizedSnakeEnv:
             running
         )
     
+    def snapshot_envs(self, env_indices):
+        """
+        Extract current internal state for the given env indices,
+        in the same format as the pregenerated position library.
+        Only meaningful for envs that are currently running.
+        """
+        env_indices_cpu = env_indices.get() if hasattr(env_indices, "get") else env_indices
+        env_indices_cpu = np.asarray(env_indices_cpu)
+
+        return {
+            "snake_boards": np.asarray(self.snake_boards[env_indices_cpu]).copy(),
+            "heads": np.asarray(self.heads[env_indices_cpu]).copy(),
+            "lengths": np.asarray(self.lengths[env_indices_cpu]).copy(),
+            "directions": np.asarray(self.curr_directions[env_indices_cpu]).copy(),
+            "count": len(env_indices_cpu)
+        }
+    
     def seed_from_library(self, env_indices, position_library):
         count = position_library["count"]
-        chosen = np.random.randint(0, count, size=len(env_indices))
-        
-        chosen_cpu = chosen.get() if hasattr(chosen, "get") else chosen
         env_indices_cpu = env_indices.get() if hasattr(env_indices, "get") else env_indices
         
-        self.snake_boards[env_indices_cpu] = np.asarray(position_library["snake_boards"][chosen_cpu])
-        self.heads[env_indices_cpu] = np.asarray(position_library["heads"][chosen_cpu])
-        self.lengths[env_indices_cpu] = np.asarray(position_library["lengths"][chosen_cpu])
-        self.curr_directions[env_indices_cpu] = np.asarray(position_library["directions"][chosen_cpu])
-        self.running[env_indices_cpu] = True
-        self.food_boards[env_indices_cpu] = 0
-        self.spawn_food(env_indices_cpu)
+        K = 4  # number of distinct positions per training block
+        chosen = np.random.choice(count, size=K, replace=False)
+        # tile across envs: env i gets position chosen[i % K]
+        tiled = chosen[np.arange(len(env_indices)) % K]
+        self.snake_boards[env_indices_cpu] = position_library["snake_boards"][tiled]
+        self.heads[env_indices_cpu] = position_library["heads"][tiled]
+        self.lengths[env_indices_cpu] = position_library["lengths"][tiled]
+        self.curr_directions[env_indices_cpu] = position_library["directions"][tiled]
     
     def pregenerate_random_snake_envs(self, pregenerated_envs=10000, min_length=10, max_length=375):
         snake_boards = np.zeros((pregenerated_envs, self.size, self.size), dtype=np.int16)

@@ -40,15 +40,17 @@ if __name__ == "__main__":
     nn.critic_layers = critic_layers
 
     nn.load()
-    t = Train(nn, board_size=BOARD_SIZE, num_envs=256)
-    epoch_max = 0
+    t = Train(nn, board_size=BOARD_SIZE, num_envs=64)
+    max_avg = 0
+    entropy = 1.0
     while True:
-        epoch_avg, entropy = t.train(verbose=False)
-        
-        if(epoch_avg > epoch_max and entropy > 0.2):
-            epoch_max = epoch_avg
-            print(f"epoch_avg: {epoch_avg:.3f} ****** New Max ******")
-            print(f"entropy: {entropy:.3f}")
-            # nn.save()
+        avg_length, max_length = t.test()
+        if(avg_length > max_avg and entropy > 0.5):
+            max_avg = avg_length
+            print(f"epoch_avg: {avg_length:.3f} ****** New Max ******")
+            # print(f"entropy: {entropy:.3f}")
+            nn.save()
         else:
-            print(f"epoch_avg: {epoch_avg:.3f}")
+            print(f"epoch_avg: {avg_length:.3f}")
+        returns_avg, entropy = t.train(verbose=False)
+        
