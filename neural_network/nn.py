@@ -12,6 +12,7 @@ class NN():
         self.actor_layers = []
         self.critic_layers = []
         self.feature_layers = []
+        self.value_layers = []
         from pathlib import Path
 
         self.BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,7 +24,7 @@ class NN():
         self.optimizer = 'adam'
     
     def forward_prop(self, state, direction, length, dx_food, dy_food, running):
-        # feature forward prop
+        # feature forward prop - run once
         feature_input = state
         for layer in self.feature_layers:
             if isinstance(layer, Reshape):
@@ -45,6 +46,74 @@ class NN():
         critic_value = self.critic_layers[-1].forward_prop_value(critic_input)
         
         return actor_probs, critic_value
+    
+    def forward_prop_value(self, state, direction, length, dx_food, dy_food, running):
+        # reuse existing feature forward prop
+        feature_input = state
+        for layer in self.feature_layers:
+            if isinstance(layer, Reshape):
+                feature_input = layer.forward_prop(feature_input, direction, length, dx_food, dy_food, running)
+            else:
+                feature_input = layer.forward_prop(feature_input)
+        
+        value_input = feature_input
+        for layer in self.value_layers[:-1]:
+            value_input = layer.forward_prop(value_input)
+        return self.value_layers[-1].forward_prop_value(value_input)
+    
+    def forward_prop_search(self, state, direction, length, dx_food, dy_food, running):
+        # feature forward prop - run once
+        feature_input = state
+        for layer in self.feature_layers:
+            if isinstance(layer, Reshape):
+                feature_input = layer.forward_prop(feature_input, direction, length, dx_food, dy_food, running)
+            else:
+                feature_input = layer.forward_prop(feature_input)
+        features = feature_input
+        
+        # actor forward prop
+        actor_input = features
+        for layer in self.actor_layers[:-1]:
+            actor_input = layer.forward_prop(actor_input)
+        actor_probs = self.actor_layers[-1].forward_prop_softmax(actor_input)
+        
+        # value forward prop
+        value_input = feature_input
+        for layer in self.value_layers[:-1]:
+            value_input = layer.forward_prop(value_input)
+        value_output = self.value_layers[-1].forward_prop_value(value_input)
+        
+        return actor_probs, value_output
+    
+    def forward_prop_full(self, state, direction, length, dx_food, dy_food, running):
+        # feature forward prop - run once
+        feature_input = state
+        for layer in self.feature_layers:
+            if isinstance(layer, Reshape):
+                feature_input = layer.forward_prop(feature_input, direction, length, dx_food, dy_food, running)
+            else:
+                feature_input = layer.forward_prop(feature_input)
+        features = feature_input
+        
+        # actor forward prop
+        actor_input = features
+        for layer in self.actor_layers[:-1]:
+            actor_input = layer.forward_prop(actor_input)
+        actor_probs = self.actor_layers[-1].forward_prop_softmax(actor_input)
+        
+        # critic forward prop
+        critic_input = features
+        for layer in self.critic_layers[:-1]:
+            critic_input = layer.forward_prop(critic_input)
+        critic_value = self.critic_layers[-1].forward_prop_value(critic_input)
+        
+        # value forward prop
+        value_input = feature_input
+        for layer in self.value_layers[:-1]:
+            value_input = layer.forward_prop(value_input)
+        value_output = self.value_layers[-1].forward_prop_value(value_input)
+        
+        return actor_probs, critic_value, value_output
     
     def backward_prop(self, actions_one_hot, advantages, returns, actor_learning_rate=0.0001, critic_learning_rate=0.0001, entropy_beta=0.02, value_loss_coef=0.5, optimizer=None):
         # actor back_prop
@@ -89,6 +158,12 @@ class NN():
         # print(f"feature input std: {np.std(feature_input):.6f}")
         return feature_input
     
+    def backward_prop_value_head(self, targets, learning_rate=0.0001):
+        dx = self.value_layers[-1].backward_prop_value(targets, learning_rate)
+        for layer in reversed(self.value_layers[:-1]):
+            dx = layer.backward_prop(dx, learning_rate)
+        return dx
+    
     def create_reshape_layer(self, input_shape, output_shape):
         return Reshape(input_shape, output_shape)
     
@@ -108,6 +183,8 @@ class NN():
             self.critic_layers[i].save(f"{self.save_dir}/critic/layer{i}")
         for i in range(len(self.feature_layers)):
             self.feature_layers[i].save(f"{self.save_dir}/feature/layer{i}")
+        for i in range(len(self.value_layers)):
+            self.value_layers[i].save(f"{self.save_dir}/value/layer{i}")
     
     def _load_layer(self, layer, filename):
         from pathlib import Path
@@ -145,6 +222,8 @@ class NN():
             self._load_layer(self.critic_layers[i], f"{self.save_dir}/critic/layer{i}.npz")
         for i in range(len(self.feature_layers)):
             self._load_layer(self.feature_layers[i], f"{self.save_dir}/feature/layer{i}.npz")
+        for i in range(len(self.value_layers)):
+            self._load_layer(self.value_layers[i], f"{self.save_dir}/value/layer{i}.npz")
     
     def choose_actions_batch(self, input, direction, length, danger_up, danger_right, danger_down, danger_left, dx_food, dy_food, running, epsilon=0.0):
         input = np.asarray(input)

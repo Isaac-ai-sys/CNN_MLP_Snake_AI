@@ -100,7 +100,7 @@ class VectorizedSnakeEnv:
 
         alive = self.running.copy()
 
-        rewards[alive] -= 0.001 # small step penalty
+        rewards[alive] -= 0.001 * (1 + self.lengths[alive] / self.size) # small step penalty
 
         old_heads = self.heads.copy()
 
@@ -177,9 +177,8 @@ class VectorizedSnakeEnv:
         )
 
         rewards[still_alive] += (
-            0.04 * (
-                old_dist[still_alive] -
-                new_dist[still_alive]
+            0.04 * (1 + self.lengths[still_alive] / self.size) * (
+                old_dist[still_alive] - new_dist[still_alive]
             )
         )
 
@@ -190,7 +189,7 @@ class VectorizedSnakeEnv:
             still_alive
         )
 
-        rewards[ate_food] += 2.0
+        rewards[ate_food] += 3.0 * (1 + self.lengths[ate_food] / self.size)
 
         # decrement snake ages
         # snakes that eat keep their tail
@@ -219,7 +218,7 @@ class VectorizedSnakeEnv:
             self.spawn_food(np.where(ate_food)[0])
 
         # death
-        rewards[done] -= 2.001
+        rewards[done] -= 2.001 * (1 + 3 * self.lengths[done] / self.size)
 
         self.running[done] = False
 
@@ -398,3 +397,10 @@ class VectorizedSnakeEnv:
             "directions": data["directions"],
             "count": int(data["lengths"].shape[0])
         }
+    def copy_env(self):
+        env = VectorizedSnakeEnv(self.num_envs, self.size)
+        env.snake_boards = self.snake_boards.copy()
+        env.heads = self.heads.copy()
+        env.lengths = self.lengths.copy()
+        env.curr_directions = self.curr_directions.copy()
+        return env

@@ -23,6 +23,8 @@ class Game():
         self.clock = pygame.time.Clock()
         self.direction = np.zeros(4)
         self.direction[0] = 1
+        self.val = 0.0
+        self.length = 1
         
         BOARD_SIZE = 20
         KERNEL_SIZE = 3
@@ -39,6 +41,7 @@ class Game():
         feature_layers = []
         actor_layers = []
         critic_layers = []
+        value_layers = []
         
         self.nn = NN()
         # create feature network
@@ -59,6 +62,11 @@ class Game():
         critic_layers.append(self.nn.create_dense_layer(32, 64)) # 64x32 = 2048 parameters
         critic_layers.append(self.nn.create_dense_layer(1, 32)) # 32x1 = parameters
         self.nn.critic_layers = critic_layers
+        
+        #create value network
+        value_layers.append(self.nn.create_dense_layer(32, 64)) # 64x32 = 2048 parameters
+        value_layers.append(self.nn.create_dense_layer(1, 32)) # 32x1 = parameters
+        self.nn.value_layers = value_layers
 
         self.nn.load()
         self.s = search(self.nn)
@@ -95,10 +103,12 @@ class Game():
             
             if self.game.running[0]:
                 state, direction, length, dx_food, dy_food, env_running = self.game.get_state()
-                action, val = self.nn.forward_prop(state, direction, length, dx_food, dy_food, env_running)
+                action, self.val = self.nn.forward_prop_search(state, direction, length, dx_food, dy_food, env_running)
                 action_idx = np.array([int(action.argmax())])
                 self.game.step(action_idx)
                 state, direction, length, dx_food, dy_food, env_running = self.game.get_state()
+                self.length = self.length = round(float(length[0]) * self.size * self.size, 1)
+                self.length = int(self.length)
                 self.snake_board = self.game.snake_boards[0]
                 self.food_board = state[0, 2]
             
@@ -122,6 +132,14 @@ class Game():
                 font = pygame.font.Font(None, 300)   # None = default font, 50 = size
                 text_surface = font.render("Game Over", True, (255, 255, 255))  # white text
                 self.screen.blit(text_surface, (100, 100))
+            #font = pygame.font.Font(None, 25)   # None = default font, 50 = size
+            #text = "Estimated Value: " + str(round(self.val, 3))
+            #text_surface = font.render(text, True, (255, 255, 255))  # white text
+            #self.screen.blit(text_surface, (self.screen.get_width() - 300, 50))
+            font = pygame.font.Font(None, 25)   # None = default font, 50 = size
+            text = "Snake Length: " + str(self.length)
+            text_surface = font.render(text, True, (255, 255, 255))  # white text
+            self.screen.blit(text_surface, (self.screen.get_width() - 300, 75))
             
             pygame.display.flip() #prints whatever updates you made to screen
 

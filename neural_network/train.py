@@ -169,6 +169,16 @@ class Train:
             dtype=np.float32
         )
 
+        final_lengths = np.zeros(
+            (T, N),
+            dtype=np.float32
+        )
+        
+        ep_start_indexes = np.zeros(
+            (N,),
+            dtype=np.int16
+        )
+        
         for t in range(T):
 
             (
@@ -242,6 +252,10 @@ class Train:
             if hasattr(dead_envs, "get"):
                 dead_envs = dead_envs.get()
             if dead_envs.size > 0:
+                for i, env_idx in enumerate(dead_envs):
+                    start = ep_start_indexes[env_idx]
+                    final_lengths[start:t+1, env_idx] = env.lengths[env_idx]
+                ep_start_indexes[dead_envs] = t + 1  # next episode starts after current t
                 env.reset(dead_envs)
                 if self.position_library is not None:
                     env.seed_from_library(dead_envs, self.position_library)
@@ -264,7 +278,9 @@ class Train:
             values[t] = value.squeeze()
 
             log_probs[t] = lp
-
+        for env_idx in range(N):
+            start = ep_start_indexes[env_idx]
+            final_lengths[start:, env_idx] = env.lengths[env_idx]  # fill remaining with current length
         return {
             "states": states,
             "directions": directions,
@@ -277,23 +293,25 @@ class Train:
             "dones": dones,
             "values": values,
             "log_probs": log_probs,
+            "final_lengths": final_lengths,
         }
 
     def train(
         self,
         epochs=100,
-        actor_learning_rate=0.0001,
+        actor_learning_rate=0.00015,
         critic_learning_rate=0.0005,
+        value_learning_rate=0.0005,
         gamma=0.99,
         lam=0.95,
         ppo_clip=0.2,
         gradient_epochs=4,
-        batch_size=1024,
-        entropy_coef=0.05,
+        batch_size=16184,
+        entropy_coef=0.005,
         value_loss_coef=0.5,
         epsilon=0.0,
         epsilon_decay=0.99,
-        epsilon_min=0.000,
+        epsilon_min=0.00,
         target_kl=0.05,
         verbose=False
     ):
@@ -332,6 +350,8 @@ class Train:
             values = rollout["values"]
 
             old_log_probs = rollout["log_probs"]
+            
+            final_lengths = rollout["final_lengths"]
 
             advantages, returns = self.compute_gae(
                 rewards,
@@ -379,6 +399,8 @@ class Train:
             advantages = advantages.reshape(B)
 
             old_log_probs = old_log_probs.reshape(B)
+            
+            final_lengths = final_lengths.reshape(B)
 
             train_start = time.perf_counter()
             
@@ -419,8 +441,8 @@ class Train:
 
                     old_lp = old_log_probs[batch_idx]
 
-                    probs, new_values = (
-                        self.nn.forward_prop(
+                    probs, new_values, estimated_lengths = (
+                        self.nn.forward_prop_full(
                             s,
                             d,
                             l,
@@ -479,6 +501,10 @@ class Train:
                             )
 
                         break
+                    
+                    if g == 0:
+                        fl = final_lengths[batch_idx] / (self.board_size * self.board_size)  # normalize
+                        self.nn.backward_prop_value_head(targets=fl[:, None], learning_rate=value_learning_rate)
 
                     self.nn.backward_prop(
                         actions_one_hot=np.eye(4)[a],
@@ -489,6 +515,7 @@ class Train:
                         entropy_beta=entropy_coef,
                         value_loss_coef=value_loss_coef
                     )
+                    
 
             train_end = time.perf_counter()
 
@@ -508,7 +535,7 @@ class Train:
             if entropy < TARGET_ENTROPY:
                 entropy_coef = min(entropy_coef * 1.005, 0.2)
             elif entropy > 1.1:
-                entropy_coef = max(entropy_coef * 0.995, 0.02)
+                entropy_coef = max(entropy_coef * 0.995, 0.0001)
             # else: leave it alone — entropy is in the healthy zone
             print(
                 f"Epoch {epoch} | "
@@ -521,7 +548,7 @@ class Train:
             )
         return avg_returns, entropy
     
-    def test(self):
+    def test(self, average_length=40):
         # clear self-play library so it only contains fresh test-run positions
         self.position_library = {
             "snake_boards": onp.zeros((0, self.board_size, self.board_size), dtype=onp.int16),
@@ -532,7 +559,7 @@ class Train:
         }
         
         env = VectorizedSnakeEnv(
-            num_envs=self.num_envs,
+            num_envs=64,
             size=self.board_size
         )
         
@@ -546,9 +573,18 @@ class Train:
             step += 1
             # snapshot currently-alive envs before stepping
             alive_idx = onp.where(env.running)[0]
+            
             if alive_idx.size > 0:
-                snapshot = env.snapshot_envs(alive_idx)
-                self.add_to_position_library(snapshot)
+                # bias snapshotting positions with lengths higher than average_length
+                random_num = np.random.randint(10)
+                if random_num < 9:
+                    long_idx = onp.where(env.running & (env.lengths > average_length))[0]
+                    if long_idx.size > 0:
+                        snapshot = env.snapshot_envs(long_idx)
+                        self.add_to_position_library(snapshot)
+                else:
+                    snapshot = env.snapshot_envs(alive_idx)
+                    self.add_to_position_library(snapshot)
 
             (
                 board,
