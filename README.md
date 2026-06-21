@@ -15,3 +15,9 @@ Both heads are trained jointly using **Proximal Policy Optimisation (PPO)** with
 
 ## Results
 - **Performance** - The agent achieves on average a score of over 60 while sometimes peaking to over 100 on pure policy.
+
+![Example Snake Game](Example_Snake_Game.png)
+
+## Instructions
+- To train the neural network - run the command "python main.py" in the root directory to start training the agent. It will only save when the test achieves a higher average than the previous maximum value.
+- To see an example of the agent running - run the command "python -m game.game" in the root directory to start a game of snake with the agent deciding every action.
