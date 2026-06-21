@@ -12,3 +12,6 @@ The network uses a shared CNN feature extractor feeding into two separate heads:
 - **Critic head** — two dense layers (64→32→1) with a linear output estimating the state value V(s).
 
 Both heads are trained jointly using **Proximal Policy Optimisation (PPO)** with GAE advantage estimation.
+
+## Results
+- **Performance** - The agent achieves on average a score of over 60 while sometimes peaking to over 100 on pure policy.
