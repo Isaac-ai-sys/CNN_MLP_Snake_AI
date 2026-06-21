@@ -3,7 +3,7 @@ Convolutional neural network designed and trained to solve the game of snake
 
 ## Architecture
 
-![Neural network architecture](architecture.svg)
+![Neural network architecture](Architecture.svg)
 
 The network uses a shared CNN feature extractor feeding into two separate heads:
 
