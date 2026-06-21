@@ -7,7 +7,6 @@ import numpy as onp
 from collections import deque
 
 import time
-import os
 
 from game.snake_env import VectorizedSnakeEnv
 
@@ -642,7 +641,7 @@ class Train:
         avg_length = float(onp.mean(env.lengths))
         max_length = int(onp.max(env.lengths))
 
-        print(f"*** Test ***")
+        print("*** Test ***")
         print(f"  Positions collected: {self.position_library['count']}")
         print(f"  Average Snake Length: {avg_length:.2f}")
         print(f"  Maximum Snake Length: {max_length}")

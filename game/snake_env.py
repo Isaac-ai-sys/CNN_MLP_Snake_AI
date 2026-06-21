@@ -397,6 +397,7 @@ class VectorizedSnakeEnv:
             "directions": data["directions"],
             "count": int(data["lengths"].shape[0])
         }
+    
     def copy_env(self):
         env = VectorizedSnakeEnv(self.num_envs, self.size)
         env.snake_boards = self.snake_boards.copy()

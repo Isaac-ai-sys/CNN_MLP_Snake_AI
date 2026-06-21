@@ -1,6 +1,4 @@
 import numpy as np
-from neural_network.nn import NN
-from game.snake_env import VectorizedSnakeEnv
 
 class search():
     def __init__(self, neural_net, depth=1):

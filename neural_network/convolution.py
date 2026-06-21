@@ -1,5 +1,3 @@
-import time
-
 USE_GPU = True
 
 if USE_GPU:
@@ -250,10 +248,6 @@ class Convolution:
             mode='constant'
         )
 
-        # Extract patches from padded gradient
-        padded_h = int(og_padded.shape[2])
-        padded_w = int(og_padded.shape[3])
-
         shape = (
             batch_size,
             self.depth,
@@ -287,7 +281,6 @@ class Convolution:
         # kernels: (depth, in_depth, k, k) -> flip spatial dims
         kernels_flipped = self.kernels[:, :, ::-1, ::-1]
         # (depth, in_depth*k*k)
-        kernels_flipped_flat = kernels_flipped.reshape(self.depth, -1)
         # We need (in_depth*k*k, depth) to map grad_patches -> input_gradient
         # But we want output (batch, in_h, in_w, in_depth)
         # grad_patches_flat: (batch, in_h, in_w, depth*k*k)
