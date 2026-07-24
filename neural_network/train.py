@@ -298,14 +298,14 @@ class Train:
     def train(
         self,
         epochs=100,
-        actor_learning_rate=0.0015,
-        critic_learning_rate=0.005,
+        actor_learning_rate=0.00015,
+        critic_learning_rate=0.0005,
         gamma=0.99,
         lam=0.95,
         ppo_clip=0.2,
         gradient_epochs=4,
         batch_size=4096,
-        entropy_coef=0.001,
+        entropy_coef=0.02,
         value_loss_coef=0.5,
         epsilon=0.2,
         epsilon_decay=0.90,
@@ -521,12 +521,12 @@ class Train:
             avg_length = env.lengths.mean()
 
             entropy = entropy_sum / entropy_count
-            TARGET_ENTROPY = 0.1
-            if entropy < TARGET_ENTROPY:
-                entropy_coef = min(entropy_coef * 1.005, 0.2)
-            elif entropy > 1.1:
-                entropy_coef = max(entropy_coef * 0.995, 0.0001)
-            # else: leave it alone — entropy is in the healthy zone
+            # TARGET_ENTROPY = 1.0
+            # if entropy < TARGET_ENTROPY:
+            #     entropy_coef = min(entropy_coef * 1.005, 0.2)
+            # elif entropy > 1.33:
+            #     entropy_coef = max(entropy_coef * 0.995, 0.0001)
+            # # else: leave it alone — entropy is in the healthy zone
             print(
                 f"Epoch {epoch} | "
                 f"Returns: {avg_returns:.3f} | "

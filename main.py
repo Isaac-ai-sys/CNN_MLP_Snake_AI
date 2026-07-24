@@ -46,7 +46,7 @@ if __name__ == "__main__":
     nn.critic_layers = critic_layers
 
     #nn.load()
-    t = Train(nn, board_size=BOARD_SIZE, num_envs=128)
+    t = Train(nn, board_size=BOARD_SIZE, num_envs=64)
     max_avg = 0
     entropy = 1.0
     avg_length = 0
