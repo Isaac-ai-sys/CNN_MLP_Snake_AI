@@ -298,18 +298,17 @@ class Train:
     def train(
         self,
         epochs=100,
-        actor_learning_rate=0.00015,
-        critic_learning_rate=0.0005,
-        value_learning_rate=0.0005,
+        actor_learning_rate=0.0015,
+        critic_learning_rate=0.005,
         gamma=0.99,
         lam=0.95,
         ppo_clip=0.2,
         gradient_epochs=4,
-        batch_size=16184,
-        entropy_coef=0.005,
+        batch_size=4096,
+        entropy_coef=0.001,
         value_loss_coef=0.5,
-        epsilon=0.0,
-        epsilon_decay=0.99,
+        epsilon=0.2,
+        epsilon_decay=0.90,
         epsilon_min=0.00,
         target_kl=0.05,
         verbose=False
@@ -349,8 +348,6 @@ class Train:
             values = rollout["values"]
 
             old_log_probs = rollout["log_probs"]
-            
-            final_lengths = rollout["final_lengths"]
 
             advantages, returns = self.compute_gae(
                 rewards,
@@ -398,8 +395,6 @@ class Train:
             advantages = advantages.reshape(B)
 
             old_log_probs = old_log_probs.reshape(B)
-            
-            final_lengths = final_lengths.reshape(B)
 
             train_start = time.perf_counter()
             
@@ -440,8 +435,8 @@ class Train:
 
                     old_lp = old_log_probs[batch_idx]
 
-                    probs, new_values, estimated_lengths = (
-                        self.nn.forward_prop_full(
+                    probs, new_values = (
+                        self.nn.forward_prop(
                             s,
                             d,
                             l,
@@ -500,10 +495,6 @@ class Train:
                             )
 
                         break
-                    
-                    if g == 0:
-                        fl = final_lengths[batch_idx] / (self.board_size * self.board_size)  # normalize
-                        self.nn.backward_prop_value_head(targets=fl[:, None], learning_rate=value_learning_rate)
 
                     self.nn.backward_prop(
                         actions_one_hot=np.eye(4)[a],
@@ -530,7 +521,7 @@ class Train:
             avg_length = env.lengths.mean()
 
             entropy = entropy_sum / entropy_count
-            TARGET_ENTROPY = 0.4
+            TARGET_ENTROPY = 0.1
             if entropy < TARGET_ENTROPY:
                 entropy_coef = min(entropy_coef * 1.005, 0.2)
             elif entropy > 1.1:
