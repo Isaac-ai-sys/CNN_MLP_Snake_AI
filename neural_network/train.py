@@ -305,15 +305,16 @@ class Train:
         ppo_clip=0.2,
         gradient_epochs=4,
         batch_size=4096,
-        entropy_coef=0.02,
+        entropy_coef=0.04,
         value_loss_coef=0.5,
-        epsilon=0.2,
-        epsilon_decay=0.90,
+        epsilon=0.00,
+        epsilon_decay=0.50,
         epsilon_min=0.00,
         target_kl=0.05,
         verbose=False
     ):
 
+        prev_entropy = 0
         env = VectorizedSnakeEnv(
             num_envs=self.num_envs,
             size=self.board_size
@@ -521,12 +522,13 @@ class Train:
             avg_length = env.lengths.mean()
 
             entropy = entropy_sum / entropy_count
-            # TARGET_ENTROPY = 1.0
-            # if entropy < TARGET_ENTROPY:
-            #     entropy_coef = min(entropy_coef * 1.005, 0.2)
-            # elif entropy > 1.33:
-            #     entropy_coef = max(entropy_coef * 0.995, 0.0001)
-            # # else: leave it alone — entropy is in the healthy zone
+            TARGET_ENTROPY = 0.7
+            if entropy < TARGET_ENTROPY and entropy < prev_entropy:
+                entropy_coef = min(entropy_coef * 1.001, 0.2)
+            elif entropy > 1 and entropy > prev_entropy:
+                entropy_coef = max(entropy_coef * 0.999, 0.0001)
+            # else: leave it alone — entropy is in the healthy zone
+            prev_entropy = entropy
             print(
                 f"Epoch {epoch} | "
                 f"Returns: {avg_returns:.3f} | "

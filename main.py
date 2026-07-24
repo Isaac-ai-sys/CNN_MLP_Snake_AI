@@ -60,4 +60,3 @@ if __name__ == "__main__":
         else:
             print(f"epoch_avg: {avg_length:.3f}")
         returns_avg, entropy = t.train(verbose=False)
-        
