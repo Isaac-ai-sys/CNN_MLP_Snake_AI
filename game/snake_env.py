@@ -177,7 +177,7 @@ class VectorizedSnakeEnv:
         )
 
         rewards[still_alive] += (
-            0.04 * (1 + self.lengths[still_alive] / self.size) * (
+            0.01 * (1 + self.lengths[still_alive] / self.size) * (
                 old_dist[still_alive] - new_dist[still_alive]
             )
         )
