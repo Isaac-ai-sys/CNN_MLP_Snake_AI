@@ -356,7 +356,6 @@ class Convolution:
 
         return input_gradient
 
-    # Fix: match Dense's leaky ReLU
     def ReLu(self, z):
         return xp.where(z > 0, z, 0.01 * z)
 

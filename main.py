@@ -33,23 +33,24 @@ if __name__ == "__main__":
     nn.feature_layers = feature_layers
     
     #create actor network
-    actor_layers.append(nn.create_dense_layer(64, 128)) # 64x32 + 64 = 8,256 parameters
+    actor_layers.append(nn.create_dense_layer(64, 128)) # 64x128 + 64 = 8,256 parameters
     actor_layers.append(nn.create_dense_layer(32, 64)) # 64x32 + 32 = 2,080 parameters
     actor_layers.append(nn.create_dense_layer(16, 32)) #  16x32 + 16 = 528 parameters
     actor_layers.append(nn.create_dense_layer(4, 16)) # 16x4 + 4 = 68 parameters
     nn.actor_layers = actor_layers
     
     #create critic network
-    critic_layers.append(nn.create_dense_layer(64, 128)) # 64x32 + 64 = 8,256 parameters
+    critic_layers.append(nn.create_dense_layer(64, 128)) # 64x128 + 64 = 8,256 parameters
     critic_layers.append(nn.create_dense_layer(32, 64)) # 64x32 + 32 = 2,080 parameters
     critic_layers.append(nn.create_dense_layer(1, 32)) # 32x1 + 1 = 33 parameters
     nn.critic_layers = critic_layers
 
     nn.load()
-    t = Train(nn, board_size=BOARD_SIZE, num_envs=64)
+    t = Train(nn, board_size=BOARD_SIZE, num_envs=128)
     max_avg = 0
     entropy = 1.0
     avg_length = 0
+    entropy_coef = 0.007
     while True:
         avg_length, max_length = t.test(avg_length)
         if(avg_length > max_avg and entropy > 0.2):
@@ -59,4 +60,4 @@ if __name__ == "__main__":
             nn.save()
         else:
             print(f"epoch_avg: {avg_length:.3f}")
-        returns_avg, entropy = t.train(verbose=False)
+        returns_avg, entropy, entropy_coef = t.train(verbose=False, entropy_coef=entropy_coef)

@@ -51,19 +51,9 @@ class Train:
 
         for t in reversed(range(T)):
 
-            delta = (
-                rewards[t]
-                + gamma * next_values * (1.0 - dones[t])
-                - values[t]
-            )
+            delta = (rewards[t] + gamma * next_values * (1.0 - dones[t]) - values[t])
 
-            gae = (
-                delta
-                + gamma
-                * lam
-                * (1.0 - dones[t])
-                * gae
-            )
+            gae = (delta + gamma * lam * (1.0 - dones[t]) * gae)
 
             advantages[t] = gae
 
@@ -298,14 +288,14 @@ class Train:
     def train(
         self,
         epochs=100,
-        actor_learning_rate=0.00015,
+        actor_learning_rate=0.0001,
         critic_learning_rate=0.0005,
         gamma=0.99,
         lam=0.95,
         ppo_clip=0.2,
         gradient_epochs=4,
-        batch_size=4096,
-        entropy_coef=0.04,
+        batch_size=16384,
+        entropy_coef=0.0125,
         value_loss_coef=0.5,
         epsilon=0.00,
         epsilon_decay=0.50,
@@ -314,20 +304,16 @@ class Train:
         verbose=False
     ):
 
-        prev_entropy = 0
         env = VectorizedSnakeEnv(
             num_envs=self.num_envs,
             size=self.board_size
         )
 
         for epoch in range(epochs):
-
+            
             rollout_start = time.perf_counter()
-
-            rollout = self.collect_rollout(
-                env,
-                epsilon=epsilon
-            )
+            
+            rollout = self.collect_rollout(env, epsilon=epsilon)
 
             rollout_end = time.perf_counter()
 
@@ -488,7 +474,7 @@ class Train:
                         old_lp - new_log_probs
                     )
 
-                    if approx_kl > target_kl and g > 0:
+                    if approx_kl > target_kl:
                         if verbose:
                             print(
                                 f"Early stopping "
@@ -506,7 +492,6 @@ class Train:
                         entropy_beta=entropy_coef,
                         value_loss_coef=value_loss_coef
                     )
-                    
 
             train_end = time.perf_counter()
 
@@ -522,13 +507,18 @@ class Train:
             avg_length = env.lengths.mean()
 
             entropy = entropy_sum / entropy_count
-            TARGET_ENTROPY = 0.7
-            if entropy < TARGET_ENTROPY and entropy < prev_entropy:
-                entropy_coef = min(entropy_coef * 1.001, 0.2)
-            elif entropy > 1 and entropy > prev_entropy:
-                entropy_coef = max(entropy_coef * 0.999, 0.0001)
+            
+            # learning rate scheduling
+            # also scale entropy_coef so it does not become overbearing
+            if epoch % 10 == 0:
+                actor_learning_rate = actor_learning_rate * 0.99
+                entropy_coef = entropy_coef * 0.995
+                entropy_coef = float(min(max(entropy_coef, 1e-5), 0.2))
+            
+            # TARGET_ENTROPY = 0.5
+            # entropy_coef *= 1.0 + 0.0275 * (TARGET_ENTROPY - entropy) / TARGET_ENTROPY
+            # entropy_coef = float(min(max(entropy_coef, 1e-5), 0.2))
             # else: leave it alone — entropy is in the healthy zone
-            prev_entropy = entropy
             print(
                 f"Epoch {epoch} | "
                 f"Returns: {avg_returns:.3f} | "
@@ -538,7 +528,7 @@ class Train:
                 f"Rollout: {rollout_end - rollout_start:.3f}s | "
                 f"Train: {train_end - train_start:.3f}s"
             )
-        return avg_returns, entropy
+        return avg_returns, entropy, entropy_coef
     
     def test(self, average_length=40):
         # clear self-play library so it only contains fresh test-run positions
@@ -551,14 +541,14 @@ class Train:
         }
         
         env = VectorizedSnakeEnv(
-            num_envs=64,
+            num_envs=128,
             size=self.board_size
         )
         
         head_history = [(deque(maxlen=self.board_size * 2), set()) for _ in range(self.num_envs)]
         prev_lengths = onp.array(env.lengths.copy())
 
-        max_steps = 10000
+        max_steps = 15000
         step = 0
 
         while onp.any(env.running) and step < max_steps:
@@ -569,7 +559,7 @@ class Train:
             if alive_idx.size > 0:
                 # bias snapshotting positions with lengths higher than average_length
                 random_num = np.random.randint(10)
-                if random_num < 9:
+                if random_num < 7:
                     long_idx = onp.where(env.running & (env.lengths > average_length))[0]
                     if long_idx.size > 0:
                         snapshot = env.snapshot_envs(long_idx)
