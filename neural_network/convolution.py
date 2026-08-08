@@ -7,18 +7,19 @@ else:
 
 
 class Convolution:
-    def __init__(self, input_shape, kernel_size, depth):
+    def __init__(self, input_shape, kernel_size, depth, padding=0):
         input_depth, input_height, input_width = input_shape
 
         self.depth = int(depth)
         self.input_depth = int(input_depth)
 
         self.input_shape = tuple(map(int, input_shape))
+        self.padding = int(padding)
 
         self.output_shape = (
             int(depth),
-            int(input_height - kernel_size + 1),
-            int(input_width - kernel_size + 1)
+            int(input_height + 2 * padding - kernel_size + 1),
+            int(input_width + 2 * padding - kernel_size + 1)
         )
 
         self.kernels_shape = (
@@ -60,9 +61,23 @@ class Convolution:
         batch_size, _, h, w = input.shape
 
         k = int(self.kernels_shape[2])
+        
+        p = self.padding
+        
+        if p > 0:
+            padded_input = xp.pad(
+                input,
+                ((0, 0), (0, 0), (p, p), (p, p)),
+                mode='constant'
+            )
+        else:
+            padded_input = input
+        
+        padded_h = padded_input.shape[2]
+        padded_w = padded_input.shape[3]
 
-        out_h = int(h - k + 1)
-        out_w = int(w - k + 1)
+        out_h = int(padded_h - k + 1)
+        out_w = int(padded_w - k + 1)
 
         # ---------------------------------------
         # Sliding window extraction
@@ -78,16 +93,16 @@ class Convolution:
         )))
 
         strides = tuple(map(int, (
-            input.strides[0],
-            input.strides[1],
-            input.strides[2],
-            input.strides[3],
-            input.strides[2],
-            input.strides[3]
+            padded_input.strides[0],
+            padded_input.strides[1],
+            padded_input.strides[2],
+            padded_input.strides[3],
+            padded_input.strides[2],
+            padded_input.strides[3]
         )))
 
         patches = xp.lib.stride_tricks.as_strided(
-            input,
+            padded_input,
             shape=shape,
             strides=strides
         )
@@ -234,13 +249,16 @@ class Convolution:
 
         # ---------------------------------------
         # Input gradient via full convolution
-        # (replaces broken as_strided col2im)
         # ---------------------------------------
 
         input_h = int(self.input.shape[2])
         input_w = int(self.input.shape[3])
+        
+        p = self.padding
 
-        # Pad output_gradient by (k-1) on all sides
+        padded_h = input_h + 2 * p
+        padded_w = input_w + 2 * p
+
         pad = k - 1
         og_padded = xp.pad(
             output_gradient,
@@ -251,8 +269,8 @@ class Convolution:
         shape = (
             batch_size,
             self.depth,
-            input_h,
-            input_w,
+            padded_h,
+            padded_w,
             k,
             k
         )
@@ -272,26 +290,20 @@ class Convolution:
             strides=tuple(map(int, strides))
         )
 
-        # (batch, depth, in_h, in_w, k, k)
-        # -> (batch, in_h, in_w, depth, k, k)
         grad_patches = grad_patches.transpose(0, 2, 3, 1, 4, 5)
-        grad_patches_flat = grad_patches.reshape(batch_size, input_h, input_w, -1)
+        # FIX: reshape using padded_h/padded_w, not input_h/input_w
+        grad_patches_flat = grad_patches.reshape(batch_size, padded_h, padded_w, -1)
 
-        # Flip kernels 180° for transposed convolution
-        # kernels: (depth, in_depth, k, k) -> flip spatial dims
         kernels_flipped = self.kernels[:, :, ::-1, ::-1]
-        # (depth, in_depth*k*k)
-        # We need (in_depth*k*k, depth) to map grad_patches -> input_gradient
-        # But we want output (batch, in_h, in_w, in_depth)
-        # grad_patches_flat: (batch, in_h, in_w, depth*k*k)
-        # kernels_flipped rearranged: (depth*k*k, in_depth)
         kernels_for_dx = kernels_flipped.transpose(1, 0, 2, 3).reshape(self.input_depth, -1).T
-        # kernels_for_dx: (depth*k*k, in_depth)
 
         input_gradient = grad_patches_flat @ kernels_for_dx
-        # (batch, in_h, in_w, in_depth)
-        # -> (batch, in_depth, in_h, in_w)
+        # (batch, padded_h, padded_w, in_depth) -> (batch, in_depth, padded_h, padded_w)
         input_gradient = input_gradient.transpose(0, 3, 1, 2)
+
+        # FIX: always crop back to the unpadded input size, for both optimizers
+        if p > 0:
+            input_gradient = input_gradient[:, :, p:-p, p:-p]
 
         # ---------------------------------------
         # Bias gradients

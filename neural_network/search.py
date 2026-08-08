@@ -1,163 +1,155 @@
-import numpy as np
+try:
+    import cupy as np
+except ImportError:
+    import numpy as np
+
+from game.snake_env import VectorizedSnakeEnv
+
 
 class search():
     def __init__(self, neural_net, depth=1):
         self.nn = neural_net
         self.depth = depth
 
-    def flood_fill(self, env, env_idx=0):
-        board = env.snake_boards[env_idx]
-        head = env.heads[env_idx]
-        size = env.size
+    def flood_fill_batch(self, boards, heads):
+        """
+        Vectorized reachability score for a whole batch of boards at once.
 
-        free_cells = int(np.sum(board == 0))
-        if free_cells == 0:
-            return 0.0
+        boards: (N, H, W) array, 0 = free cell, non-zero = occupied
+        heads:  (N, 2) int array of (x, y) head positions
 
-        visited = np.zeros((size, size), dtype=bool)
-        queue = [tuple(head)]
-        visited[head[0], head[1]] = True
-        count = 0
+        Returns (N,) array: fraction of each board's free cells that are
+        reachable from its head.
 
-        while queue:
-            x, y = queue.pop(0)
-            count += 1
-            for dx, dy in [(0,1),(0,-1),(1,0),(-1,0)]:
-                nx, ny = x + dx, y + dy
-                if 0 <= nx < size and 0 <= ny < size:
-                    if not visited[nx, ny] and board[nx, ny] == 0:
-                        visited[nx, ny] = True
-                        queue.append((nx, ny))
+        Implemented as iterative dilation (BFS "wavefront" expressed as
+        array ops) instead of a per-board Python BFS queue, so every board
+        in the batch advances together as plain vectorized array math —
+        this is what lets it run on the GPU. `max_iters = H * W` is the
+        worst-case geodesic distance across a maze-shaped free region, so
+        results are exact, matching a true BFS.
+        """
+        boards = np.asarray(boards)
+        heads = np.asarray(heads)
+        N, H, W = boards.shape
 
-        return count / free_cells  # fraction of free cells that are reachable
+        free_mask = (boards == 0)
+        free_counts = free_mask.reshape(N, -1).sum(axis=1)
+
+        visited = np.zeros((N, H, W), dtype=bool)
+        idx = np.arange(N)
+        visited[idx, heads[:, 0], heads[:, 1]] = True
+
+        max_iters = H * W
+        for _ in range(max_iters):
+            up = np.zeros_like(visited)
+            up[:, :-1, :] = visited[:, 1:, :]
+            down = np.zeros_like(visited)
+            down[:, 1:, :] = visited[:, :-1, :]
+            left = np.zeros_like(visited)
+            left[:, :, :-1] = visited[:, :, 1:]
+            right = np.zeros_like(visited)
+            right[:, :, 1:] = visited[:, :, :-1]
+            visited = visited | ((up | down | left | right) & free_mask)
+
+        counts = visited.reshape(N, -1).sum(axis=1)
+        return counts / np.maximum(free_counts, 1)
+
+    def find_top2_actions_batch(self, probs):
+        """
+        probs: (N, 4) action probabilities.
+        Returns one-hot arrays (N, 4) for the best and second-best action
+        of every row at once (replaces the old per-node python loop).
+        """
+        order = np.argsort(probs, axis=1)
+        best_idx = order[:, -1]
+        second_idx = order[:, -2]
+
+        N = probs.shape[0]
+        rows = np.arange(N)
+
+        best_oh = np.zeros_like(probs)
+        second_oh = np.zeros_like(probs)
+        best_oh[rows, best_idx] = 1
+        second_oh[rows, second_idx] = 1
+
+        return best_idx, second_idx, best_oh, second_oh
 
     def find_best_action(self, state, direction, length, dx_food, dy_food, running, env):
         """
-        BFS search that batches forward props at each depth level.
-        Prunes branches where flood fill score is too low.
+        BFS-style search where every depth level advances as ONE batched
+        operation across the whole frontier: one forward prop, one env
+        step for each of the two candidate actions, one vectorized
+        flood-fill, one prune. There is no per-node Python loop — the
+        frontier itself is a single (batched) VectorizedSnakeEnv whose
+        size shrinks as branches die or get pruned.
         """
-
-        # each node stores:
-        # (env, state, direction, length, dx_food, dy_food, running, root_action, is_alive)
-        initial_node = (env, state, direction, length, dx_food, dy_food, running, None)
-        current_level = [initial_node]
 
         FLOOD_FILL_THRESHOLD = 0.3  # prune if less than 30% of free space is accessible
         FLOOD_FILL_WEIGHT = 0.5
         VALUE_WEIGHT = 0.5
 
+        batch_env = env          # frontier of speculative envs, num_envs = live branch count
+        root_actions = None      # (num_envs, 4) one-hot, aligned with batch_env
+
         for depth in range(self.depth):
-            if not current_level:
+            if batch_env.num_envs == 0:
                 break
 
-            # batch all states at this level into single forward prop
-            batch_states      = np.concatenate([node[1] for node in current_level], axis=0)
-            batch_directions  = np.concatenate([node[2] for node in current_level], axis=0)
-            batch_lengths     = np.concatenate([node[3].reshape(-1) for node in current_level], axis=0)
-            batch_dx          = np.concatenate([node[4].reshape(-1) for node in current_level], axis=0)
-            batch_dy          = np.concatenate([node[5].reshape(-1) for node in current_level], axis=0)
-            batch_running     = np.concatenate([node[6].reshape(-1) for node in current_level], axis=0)
+            b_state, b_dir, b_len, b_dx, b_dy, b_running = batch_env.get_state()
 
-            probs, values = self.nn.forward_prop_search(
-                batch_states,
-                batch_directions,
-                batch_lengths,
-                batch_dx,
-                batch_dy,
-                batch_running
+            probs, _ = self.nn.forward_prop_search(
+                b_state, b_dir, b_len, b_dx, b_dy, b_running
             )
+            probs = np.asarray(probs)
 
-            next_level = []
+            _, _, best_oh, second_oh = self.find_top2_actions_batch(probs)
+            best_idx = np.argmax(best_oh, axis=1)
+            second_idx = np.argmax(second_oh, axis=1)
 
-            for i, node in enumerate(current_level):
-                node_env, _, _, _, _, _, _, root_action = node
+            env_a = batch_env.copy_env()
+            env_b = batch_env.copy_env()
+            env_a.step(best_idx)
+            env_b.step(second_idx)
 
-                action_1_one_hot, action_2_one_hot = self.find_top_two_actions(probs[i])
+            branch_env = VectorizedSnakeEnv.concat([env_a, env_b])
 
-                for action_one_hot in [action_1_one_hot, action_2_one_hot]:
-                    action_idx = int(action_one_hot.argmax())
+            if depth == 0:
+                branch_root_actions = np.concatenate([best_oh, second_oh], axis=0)
+            else:
+                branch_root_actions = np.concatenate([root_actions, root_actions], axis=0)
 
-                    # set root action on first depth
-                    if depth == 0:
-                        this_root_action = action_one_hot
-                    else:
-                        this_root_action = root_action
+            alive_mask = branch_env.running.astype(bool)
+            fill_scores = self.flood_fill_batch(branch_env.snake_boards, branch_env.heads)
+            keep_mask = alive_mask & (fill_scores >= FLOOD_FILL_THRESHOLD)
 
-                    new_env = node_env.copy_env()
-                    new_env.step(np.array([action_idx]))
+            keep_idx = np.where(keep_mask)[0]
 
-                    # prune dead branches
-                    if not new_env.running[0]:
-                        continue
+            batch_env = branch_env.select(keep_idx)
+            root_actions = branch_root_actions[keep_idx]
 
-                    # flood fill pruning
-                    fill_score = self.flood_fill(new_env)
-                    if fill_score < FLOOD_FILL_THRESHOLD:
-                        continue
-
-                    new_state, new_dir, new_len, new_dx, new_dy, new_running = new_env.get_state()
-
-                    next_level.append((
-                        new_env,
-                        new_state,
-                        new_dir,
-                        new_len,
-                        new_dx,
-                        new_dy,
-                        new_running,
-                        this_root_action
-                    ))
-
-            current_level = next_level
-
-        # evaluate all leaf nodes
-        if not current_level:
+        if batch_env.num_envs == 0:
             # all branches pruned - fall back to policy only
-            probs, values = self.nn.forward_prop_search(state, direction, length, dx_food, dy_food, running)
-            best_action, _ = self.find_top_two_actions(probs[0])
-            return best_action, float(values[0, 0])
+            probs, values = self.nn.forward_prop_search(
+                state, direction, length, dx_food, dy_food, running
+            )
+            probs = np.asarray(probs)
+            values = np.asarray(values)
+            _, _, best_oh, _ = self.find_top2_actions_batch(probs)
+            return best_oh[0], float(values[0, 0])
 
-        # batch evaluate leaves
-        batch_states     = np.concatenate([node[1] for node in current_level], axis=0)
-        batch_directions = np.concatenate([node[2] for node in current_level], axis=0)
-        batch_lengths    = np.concatenate([node[3].reshape(-1) for node in current_level], axis=0)
-        batch_dx         = np.concatenate([node[4].reshape(-1) for node in current_level], axis=0)
-        batch_dy         = np.concatenate([node[5].reshape(-1) for node in current_level], axis=0)
-        batch_running    = np.concatenate([node[6].reshape(-1) for node in current_level], axis=0)
+        # evaluate all leaf nodes in one batch
+        leaf_state, leaf_dir, leaf_len, leaf_dx, leaf_dy, leaf_running = batch_env.get_state()
 
         _, leaf_values = self.nn.forward_prop_search(
-            batch_states,
-            batch_directions,
-            batch_lengths,
-            batch_dx,
-            batch_dy,
-            batch_running
+            leaf_state, leaf_dir, leaf_len, leaf_dx, leaf_dy, leaf_running
         )
+        leaf_values = np.asarray(leaf_values)
 
-        best_score = -1e9
-        best_action = None
+        fill_scores = self.flood_fill_batch(batch_env.snake_boards, batch_env.heads)
+        combined_scores = VALUE_WEIGHT * leaf_values[:, 0] + FLOOD_FILL_WEIGHT * fill_scores
 
-        for i, node in enumerate(current_level):
-            node_env = node[0]
-            root_action = node[7]
-
-            fill_score = self.flood_fill(node_env)
-            value_score = float(leaf_values[i, 0])
-
-            combined_score = VALUE_WEIGHT * value_score + FLOOD_FILL_WEIGHT * fill_score
-
-            if combined_score > best_score:
-                best_score = combined_score
-                best_action = root_action
+        best_leaf_idx = int(np.argmax(combined_scores))
+        best_action = root_actions[best_leaf_idx]
+        best_score = float(combined_scores[best_leaf_idx])
 
         return best_action, best_score
-    
-    def find_top_two_actions(self, probs):
-        top2 = np.argsort(probs)[-2:]
-        action_1_one_hot = np.zeros(4)
-        action_2_one_hot = np.zeros(4)
-        idx1 = int(top2[1])
-        idx2 = int(top2[0])
-        action_1_one_hot[idx1] = 1
-        action_2_one_hot[idx2] = 1
-        return action_1_one_hot, action_2_one_hot

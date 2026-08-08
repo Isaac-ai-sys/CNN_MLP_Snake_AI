@@ -18,7 +18,7 @@ class Train:
         neural_net,
         board_size=20,
         num_envs=64,
-        rollout_steps=1024
+        rollout_steps=512
     ):
         self.nn = neural_net
         self.board_size = board_size
@@ -67,6 +67,7 @@ class Train:
         lib = self.position_library
         count = lib["count"]
         lib["snake_boards"] = lib["snake_boards"][count:]
+        lib["food_boards"] = lib["food_boards"][count:]
         lib["heads"] = lib["heads"][count:]
         lib["lengths"] = lib["lengths"][count:]
         lib["directions"] = lib["directions"][count:]
@@ -84,6 +85,7 @@ class Train:
             return onp.concatenate([a, b], axis=0)
 
         lib["snake_boards"] = cat(lib["snake_boards"], snapshot["snake_boards"])
+        lib["food_boards"]  = cat(lib["food_boards"],  snapshot["food_boards"])
         lib["heads"]        = cat(lib["heads"],        snapshot["heads"])
         lib["lengths"]      = cat(lib["lengths"],      snapshot["lengths"])
         lib["directions"]   = cat(lib["directions"],   snapshot["directions"])
@@ -95,7 +97,7 @@ class Train:
         epsilon=0.0
     ):
         if self.position_library is not None:
-            n_seeded = self.num_envs
+            n_seeded = self.num_envs - 16
             seeded_idx = np.random.choice(self.num_envs, n_seeded, replace=False)
             env.seed_from_library(seeded_idx, self.position_library)
 
@@ -158,16 +160,6 @@ class Train:
             dtype=np.float32
         )
 
-        final_lengths = np.zeros(
-            (T, N),
-            dtype=np.float32
-        )
-        
-        ep_start_indexes = np.zeros(
-            (N,),
-            dtype=np.int16
-        )
-        
         for t in range(T):
 
             (
@@ -236,15 +228,9 @@ class Train:
             )
             done = 1.0 - done
 
-            # reset finished environments so new episodes can continue
-            dead_envs = np.where(done == 1.0)[0]
-            if hasattr(dead_envs, "get"):
-                dead_envs = dead_envs.get()
-            if dead_envs.size > 0:
-                for i, env_idx in enumerate(dead_envs):
-                    start = ep_start_indexes[env_idx]
-                    final_lengths[start:t+1, env_idx] = env.lengths[env_idx]
-                ep_start_indexes[dead_envs] = t + 1  # next episode starts after current t
+            dead_mask = (done == 1.0)
+            if bool(np.any(dead_mask)):
+                dead_envs = np.where(dead_mask)[0]
                 env.reset(dead_envs)
                 if self.position_library is not None:
                     env.seed_from_library(dead_envs, self.position_library)
@@ -267,9 +253,7 @@ class Train:
             values[t] = value.squeeze()
 
             log_probs[t] = lp
-        for env_idx in range(N):
-            start = ep_start_indexes[env_idx]
-            final_lengths[start:, env_idx] = env.lengths[env_idx]  # fill remaining with current length
+        
         return {
             "states": states,
             "directions": directions,
@@ -282,23 +266,22 @@ class Train:
             "dones": dones,
             "values": values,
             "log_probs": log_probs,
-            "final_lengths": final_lengths,
         }
 
     def train(
         self,
         epochs=100,
-        actor_learning_rate=0.0001,
-        critic_learning_rate=0.0005,
+        actor_learning_rate=0.003,
+        critic_learning_rate=0.005,
         gamma=0.99,
         lam=0.95,
         ppo_clip=0.2,
         gradient_epochs=4,
-        batch_size=16384,
+        batch_size=4096,
         entropy_coef=0.0125,
         value_loss_coef=0.5,
         epsilon=0.00,
-        epsilon_decay=0.50,
+        epsilon_decay=0.80,
         epsilon_min=0.00,
         target_kl=0.05,
         verbose=False
@@ -512,7 +495,8 @@ class Train:
             # also scale entropy_coef so it does not become overbearing
             if epoch % 10 == 0:
                 actor_learning_rate = actor_learning_rate * 0.99
-                entropy_coef = entropy_coef * 0.995
+                critic_learning_rate = critic_learning_rate * 0.99
+                entropy_coef = entropy_coef * 0.99
                 entropy_coef = float(min(max(entropy_coef, 1e-5), 0.2))
             
             # TARGET_ENTROPY = 0.5
@@ -528,101 +512,84 @@ class Train:
                 f"Rollout: {rollout_end - rollout_start:.3f}s | "
                 f"Train: {train_end - train_start:.3f}s"
             )
-        return avg_returns, entropy, entropy_coef
+        return avg_returns, entropy, entropy_coef, actor_learning_rate, critic_learning_rate
     
     def test(self, average_length=40):
+        def to_cpu(x):
+            return x.get() if hasattr(x, "get") else onp.asarray(x)
+
         # clear self-play library so it only contains fresh test-run positions
         self.position_library = {
             "snake_boards": onp.zeros((0, self.board_size, self.board_size), dtype=onp.int16),
+            "food_boards": onp.zeros((0, self.board_size, self.board_size), dtype=onp.int16),
             "heads": onp.zeros((0, 2), dtype=onp.int32),
             "lengths": onp.zeros((0,), dtype=onp.int32),
             "directions": onp.zeros((0,), dtype=onp.int8),
             "count": 0
         }
-        
-        env = VectorizedSnakeEnv(
-            num_envs=128,
-            size=self.board_size
-        )
-        
-        head_history = [(deque(maxlen=self.board_size * 2), set()) for _ in range(self.num_envs)]
-        prev_lengths = onp.array(env.lengths.copy())
+
+        env = VectorizedSnakeEnv(num_envs=128, size=self.board_size)
+        N, S = env.num_envs, self.board_size
+        window = S * 2  # equivalent to the old deque(maxlen=S*2)
+
+        # GPU-resident loop-detection state, replaces per-env deque/set.
+        # -1 = never visited (or reset by eating); otherwise the step at
+        # which the head last occupied that cell.
+        visit_step = np.full((N, S, S), -1, dtype=np.int32)
+        prev_lengths = env.lengths.copy()  # kept on device, not pulled to host
 
         max_steps = 15000
-        step = 0
+        CHECK_EVERY = 32  # amortize the "any envs still running" sync
 
-        while onp.any(env.running) and step < max_steps:
-            step += 1
-            # snapshot currently-alive envs before stepping
-            alive_idx = onp.where(env.running)[0]
-            
-            if alive_idx.size > 0:
-                # bias snapshotting positions with lengths higher than average_length
-                random_num = np.random.randint(10)
-                if random_num < 7:
-                    long_idx = onp.where(env.running & (env.lengths > average_length))[0]
-                    if long_idx.size > 0:
-                        snapshot = env.snapshot_envs(long_idx)
-                        self.add_to_position_library(snapshot)
-                else:
-                    snapshot = env.snapshot_envs(alive_idx)
-                    self.add_to_position_library(snapshot)
+        idx = np.arange(N)
 
-            (
-                board,
-                direction,
-                length,
-                dx_food,
-                dy_food,
-                running
-            ) = env.get_state()
-            
-            #check for loops
-            curr_lengths = onp.array(env.lengths)
-            for idx in onp.where(env.running)[0]:
-                pos = tuple(env.heads[idx])
-                dq, seen = head_history[idx]
-                
-                # if snake ate, reset history — revisiting positions is now valid
-                if curr_lengths[idx] > prev_lengths[idx]:
-                    dq.clear()
-                    seen.clear()
-                
-                if pos in seen:
-                    env.running[idx] = False
-                else:
-                    if len(dq) == dq.maxlen:
-                        seen.discard(dq[0])
-                    dq.append(pos)
-                    seen.add(pos)
+        for step in range(max_steps):
 
-            prev_lengths = curr_lengths
+            if step % CHECK_EVERY == 0:
+                if not bool(np.any(env.running)):
+                    break
 
-            board = np.asarray(board)
-            direction = np.asarray(direction)
-            length = np.asarray(length)
-            dx_food = np.asarray(dx_food)
-            dy_food = np.asarray(dy_food)
-            running = np.asarray(running)
+            alive_mask = env.running
 
-            probs, _ = self.nn.forward_prop(
-                board,
-                direction,
-                length,
-                dx_food,
-                dy_food,
-                running
+            # pure control-flow coin flip — generate it on the host, there's
+            # no reason to pay a GPU random call + sync for this
+            if onp.random.randint(10) < 7:
+                snap_mask = alive_mask & (env.lengths > average_length)
+            else:
+                snap_mask = alive_mask
+
+            snap_idx = np.where(snap_mask)[0]
+            if snap_idx.size > 0:
+                snapshot = env.snapshot_envs(snap_idx)
+                self.add_to_position_library(snapshot)
+
+            board, direction, length, dx_food, dy_food, running = env.get_state()
+
+            # --- vectorized loop detection (replaces the deque/set loop) ---
+            hx, hy = env.heads[:, 0], env.heads[:, 1]
+
+            ate = env.lengths > prev_lengths
+            visit_step = np.where(ate[:, None, None], -1, visit_step)
+
+            last_visit = visit_step[idx, hx, hy]
+            in_window = (last_visit >= 0) & ((step - last_visit) <= window)
+            newly_dead = env.running & in_window
+
+            visit_step[idx, hx, hy] = np.where(
+                env.running, step, visit_step[idx, hx, hy]
             )
+            env.running = env.running & (~newly_dead)
 
-            # argmax on GPU, then bring to CPU for env.step
-            actions = np.argmax(probs, axis=1)
-            if hasattr(actions, "get"):
-                actions = actions.get()
+            prev_lengths = env.lengths.copy()
+            # --- end loop detection ---
 
+            probs, _ = self.nn.forward_prop(board, direction, length, dx_food, dy_food, running)
+
+            actions = np.argmax(probs, axis=1)  # stays on device
             env.step(actions)
 
-        avg_length = float(onp.mean(env.lengths))
-        max_length = int(onp.max(env.lengths))
+        avg_length = float(to_cpu(env.lengths).mean())
+        max_length = int(to_cpu(env.lengths).max())
 
         print("*** Test ***")
         print(f"  Positions collected: {self.position_library['count']}")

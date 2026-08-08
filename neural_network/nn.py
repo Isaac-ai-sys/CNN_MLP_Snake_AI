@@ -95,8 +95,8 @@ class NN():
     def create_dense_layer(self, neurons, inputs):
         return Dense(neurons, inputs)
     
-    def create_convolution_layer(self, input_shape, kernel_size, depth):
-        return Convolution(input_shape, kernel_size, depth)
+    def create_convolution_layer(self, input_shape, kernel_size, depth, padding=0):
+        return Convolution(input_shape, kernel_size, depth, padding)
     
     def create_max_pool_layer(self, size):
         return Max_Pool(size)
