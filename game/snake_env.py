@@ -338,7 +338,7 @@ class VectorizedSnakeEnv:
         count = position_library["count"]
         env_indices_cpu = env_indices.get() if hasattr(env_indices, "get") else env_indices
 
-        K = 128  # number of distinct positions per training block
+        K = 512  # number of distinct positions per training block
         chosen = onp.random.choice(count, size=K, replace=False)
         # tile across envs: env i gets position chosen[i % K]
         tiled = chosen[onp.arange(len(env_indices_cpu)) % K]

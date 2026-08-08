@@ -46,9 +46,9 @@ if __name__ == "__main__":
     max_avg = 0
     entropy = 1.0
     avg_length = 0
-    entropy_coef = 0.1
-    actor_learning_rate = 0.003
-    critic_learning_rate = 0.005
+    entropy_coef = 0.02
+    actor_learning_rate = 0.0003
+    critic_learning_rate = 0.0005
     while True:
         avg_length, max_length = t.test(avg_length)
         if(avg_length > max_avg and entropy > 0.2):

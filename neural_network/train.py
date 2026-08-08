@@ -528,7 +528,7 @@ class Train:
             "count": 0
         }
 
-        env = VectorizedSnakeEnv(num_envs=128, size=self.board_size)
+        env = VectorizedSnakeEnv(num_envs=512, size=self.board_size)
         N, S = env.num_envs, self.board_size
         window = S * 2  # equivalent to the old deque(maxlen=S*2)
 
