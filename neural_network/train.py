@@ -493,7 +493,7 @@ class Train:
             
             # learning rate scheduling
             # also scale entropy_coef so it does not become overbearing
-            if epoch % 10 == 0:
+            if epoch % 25 == 0:
                 actor_learning_rate = actor_learning_rate * 0.99
                 critic_learning_rate = critic_learning_rate * 0.99
                 entropy_coef = entropy_coef * 0.99
